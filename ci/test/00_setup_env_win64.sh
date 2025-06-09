@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 #
-# Copyright (c) 2019-present The Bitcoin Core developers
+# Copyright (c) 2019-2020 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 export LC_ALL=C.UTF-8
 
 export CONTAINER_NAME=ci_win64
-export CI_IMAGE_NAME_TAG="mirror.gcr.io/ubuntu:24.04"  # Check that https://packages.ubuntu.com/noble/g++-mingw-w64-x86-64-posix (version 13.x, similar to guix) can cross-compile
-export CI_IMAGE_PLATFORM="linux/amd64"
+export DOCKER_NAME_TAG=ubuntu:18.04  # Check that bionic can cross-compile to win64 (bionic is used in the gitian build as well)
 export HOST=x86_64-w64-mingw32
-export PACKAGES="g++-mingw-w64-x86-64-posix nsis"
-export RUN_UNIT_TESTS=false
+export PACKAGES="python3 nsis g++-mingw-w64-x86-64 wine-binfmt wine64 file"
 export RUN_FUNCTIONAL_TESTS=false
+export RUN_SECURITY_TESTS="true"
 export GOAL="deploy"
-export BITCOIN_CONFIG="-DREDUCE_EXPORTS=ON -DBUILD_GUI_TESTS=OFF \
--DCMAKE_CXX_FLAGS='-Wno-error=maybe-uninitialized'"
+export BITCOIN_CONFIG="--enable-reduce-exports --disable-gui-tests --without-boost-process"

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,7 @@
 #include <flatfile.h>
 #include <logging.h>
 #include <tinyformat.h>
-#include <util/fs_helpers.h>
+#include <util/system.h>
 
 FlatFileSeq::FlatFileSeq(fs::path dir, const char* prefix, size_t chunk_size) :
     m_dir(std::move(dir)),
@@ -27,10 +27,10 @@ std::string FlatFilePos::ToString() const
 
 fs::path FlatFileSeq::FileName(const FlatFilePos& pos) const
 {
-    return m_dir / fs::u8path(strprintf("%s%05u.dat", m_prefix, pos.nFile));
+    return m_dir / strprintf("%s%05u.dat", m_prefix, pos.nFile);
 }
 
-FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only) const
+FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only)
 {
     if (pos.IsNull()) {
         return nullptr;
@@ -41,18 +41,18 @@ FILE* FlatFileSeq::Open(const FlatFilePos& pos, bool read_only) const
     if (!file && !read_only)
         file = fsbridge::fopen(path, "wb+");
     if (!file) {
-        LogPrintf("Unable to open file %s\n", fs::PathToString(path));
+        LogPrintf("Unable to open file %s\n", path.string());
         return nullptr;
     }
     if (pos.nPos && fseek(file, pos.nPos, SEEK_SET)) {
-        LogPrintf("Unable to seek to position %u of %s\n", pos.nPos, fs::PathToString(path));
+        LogPrintf("Unable to seek to position %u of %s\n", pos.nPos, path.string());
         fclose(file);
         return nullptr;
     }
     return file;
 }
 
-size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space) const
+size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space)
 {
     out_of_space = false;
 
@@ -66,7 +66,7 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
         if (CheckDiskSpace(m_dir, inc_size)) {
             FILE *file = Open(pos);
             if (file) {
-                LogDebug(BCLog::VALIDATION, "Pre-allocating up to position 0x%x in %s%05u.dat\n", new_size, m_prefix, pos.nFile);
+                LogPrintf("Pre-allocating up to position 0x%x in %s%05u.dat\n", new_size, m_prefix, pos.nFile);
                 AllocateFileRange(file, pos.nPos, inc_size);
                 fclose(file);
                 return inc_size;
@@ -78,24 +78,20 @@ size_t FlatFileSeq::Allocate(const FlatFilePos& pos, size_t add_size, bool& out_
     return 0;
 }
 
-bool FlatFileSeq::Flush(const FlatFilePos& pos, bool finalize) const
+bool FlatFileSeq::Flush(const FlatFilePos& pos, bool finalize)
 {
     FILE* file = Open(FlatFilePos(pos.nFile, 0)); // Avoid fseek to nPos
     if (!file) {
-        LogError("%s: failed to open file %d\n", __func__, pos.nFile);
-        return false;
+        return error("%s: failed to open file %d", __func__, pos.nFile);
     }
     if (finalize && !TruncateFile(file, pos.nPos)) {
         fclose(file);
-        LogError("%s: failed to truncate file %d\n", __func__, pos.nFile);
-        return false;
+        return error("%s: failed to truncate file %d", __func__, pos.nFile);
     }
     if (!FileCommit(file)) {
         fclose(file);
-        LogError("%s: failed to commit file %d\n", __func__, pos.nFile);
-        return false;
+        return error("%s: failed to commit file %d", __func__, pos.nFile);
     }
-    DirectoryCommit(m_dir);
 
     fclose(file);
     return true;

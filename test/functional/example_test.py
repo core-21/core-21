@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2022 The Bitcoin Core developers
+# Copyright (c) 2017-2019 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """An example functional test
@@ -14,15 +14,8 @@ is testing and *how* it's being tested
 from collections import defaultdict
 
 # Avoid wildcard * imports
-# Use lexicographically sorted multi-line imports
-from test_framework.blocktools import (
-    create_block,
-    create_coinbase,
-)
-from test_framework.messages import (
-    CInv,
-    MSG_BLOCK,
-)
+from test_framework.blocktools import (create_block, create_coinbase)
+from test_framework.messages import CInv, MSG_BLOCK
 from test_framework.p2p import (
     P2PInterface,
     msg_block,
@@ -83,9 +76,6 @@ class ExampleTest(BitcoinTestFramework):
         """Override test parameters for your individual test.
 
         This method must be overridden and num_nodes must be explicitly set."""
-        # By default every test loads a pre-mined chain of 200 blocks from cache.
-        # Set setup_clean_chain to True to skip this and start from the Genesis
-        # block.
         self.setup_clean_chain = True
         self.num_nodes = 3
         # Use self.extra_args to change command-line arguments for the nodes
@@ -148,7 +138,8 @@ class ExampleTest(BitcoinTestFramework):
         peer_messaging = self.nodes[0].add_p2p_connection(BaseNode())
 
         # Generating a block on one of the nodes will get us out of IBD
-        blocks = [int(self.generate(self.nodes[0], sync_fun=lambda: self.sync_all(self.nodes[0:2]), nblocks=1)[0], 16)]
+        blocks = [int(self.nodes[0].generate(nblocks=1)[0], 16)]
+        self.sync_all(self.nodes[0:2])
 
         # Notice above how we called an RPC by calling a method with the same
         # name on the node object. Notice also how we used a keyword argument
@@ -181,7 +172,7 @@ class ExampleTest(BitcoinTestFramework):
             block.solve()
             block_message = msg_block(block)
             # Send message is used to send a P2P message to the node over our P2PInterface
-            peer_messaging.send_without_ping(block_message)
+            peer_messaging.send_message(block_message)
             self.tip = block.sha256
             blocks.append(self.tip)
             self.block_time += 1
@@ -206,7 +197,7 @@ class ExampleTest(BitcoinTestFramework):
         getdata_request = msg_getdata()
         for block in blocks:
             getdata_request.inv.append(CInv(MSG_BLOCK, block))
-        peer_receiving.send_without_ping(getdata_request)
+        peer_receiving.send_message(getdata_request)
 
         # wait_until() will loop until a predicate condition is met. Use it to test properties of the
         # P2PInterface objects.
@@ -222,4 +213,4 @@ class ExampleTest(BitcoinTestFramework):
 
 
 if __name__ == '__main__':
-    ExampleTest(__file__).main()
+    ExampleTest().main()

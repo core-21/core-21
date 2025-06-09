@@ -1,15 +1,14 @@
-// Copyright (c) 2016-2021 The Bitcoin Core developers
+// Copyright (c) 2016-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <consensus/amount.h>
+#include <amount.h>
 #include <policy/feerate.h>
-
-#include <limits>
+#include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
 
-BOOST_AUTO_TEST_SUITE(amount_tests)
+BOOST_FIXTURE_TEST_SUITE(amount_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(MoneyRangeTest)
 {
@@ -48,13 +47,13 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK_EQUAL(feeRate.GetFee(9e3), CAmount(-9e3));
 
     feeRate = CFeeRate(123);
-    // Rounds up the result, if not integer
+    // Truncates the result, if not integer
     BOOST_CHECK_EQUAL(feeRate.GetFee(0), CAmount(0));
     BOOST_CHECK_EQUAL(feeRate.GetFee(8), CAmount(1)); // Special case: returns 1 instead of 0
-    BOOST_CHECK_EQUAL(feeRate.GetFee(9), CAmount(2));
-    BOOST_CHECK_EQUAL(feeRate.GetFee(121), CAmount(15));
-    BOOST_CHECK_EQUAL(feeRate.GetFee(122), CAmount(16));
-    BOOST_CHECK_EQUAL(feeRate.GetFee(999), CAmount(123));
+    BOOST_CHECK_EQUAL(feeRate.GetFee(9), CAmount(1));
+    BOOST_CHECK_EQUAL(feeRate.GetFee(121), CAmount(14));
+    BOOST_CHECK_EQUAL(feeRate.GetFee(122), CAmount(15));
+    BOOST_CHECK_EQUAL(feeRate.GetFee(999), CAmount(122));
     BOOST_CHECK_EQUAL(feeRate.GetFee(1e3), CAmount(123));
     BOOST_CHECK_EQUAL(feeRate.GetFee(9e3), CAmount(1107));
 
@@ -84,33 +83,7 @@ BOOST_AUTO_TEST_CASE(GetFeeTest)
     BOOST_CHECK(CFeeRate(CAmount(26), 789) == CFeeRate(32));
     BOOST_CHECK(CFeeRate(CAmount(27), 789) == CFeeRate(34));
     // Maximum size in bytes, should not crash
-    CFeeRate(MAX_MONEY, std::numeric_limits<uint32_t>::max()).GetFeePerK();
-
-    // check multiplication operator
-    // check multiplying by zero
-    feeRate = CFeeRate(1000);
-    BOOST_CHECK(0 * feeRate == CFeeRate(0));
-    BOOST_CHECK(feeRate * 0 == CFeeRate(0));
-    // check multiplying by a positive integer
-    BOOST_CHECK(3 * feeRate == CFeeRate(3000));
-    BOOST_CHECK(feeRate * 3 == CFeeRate(3000));
-    // check multiplying by a negative integer
-    BOOST_CHECK(-3 * feeRate == CFeeRate(-3000));
-    BOOST_CHECK(feeRate * -3 == CFeeRate(-3000));
-    // check commutativity
-    BOOST_CHECK(2 * feeRate == feeRate * 2);
-    // check with large numbers
-    int largeNumber = 1000000;
-    BOOST_CHECK(largeNumber * feeRate == feeRate * largeNumber);
-    // check boundary values
-    int maxInt = std::numeric_limits<int>::max();
-    feeRate = CFeeRate(maxInt);
-    BOOST_CHECK(feeRate * 2 == CFeeRate(static_cast<int64_t>(maxInt) * 2));
-    BOOST_CHECK(2 * feeRate == CFeeRate(static_cast<int64_t>(maxInt) * 2));
-    // check with zero fee rate
-    feeRate = CFeeRate(0);
-    BOOST_CHECK(feeRate * 5 == CFeeRate(0));
-    BOOST_CHECK(5 * feeRate == CFeeRate(0));
+    CFeeRate(MAX_MONEY, std::numeric_limits<size_t>::max() >> 1).GetFeePerK();
 }
 
 BOOST_AUTO_TEST_CASE(BinaryOperatorTest)

@@ -10,8 +10,7 @@ that file and modify to fit your needs.
 
 #### Coverage
 
-Assuming the build directory is `build`,
-running `build/test/functional/test_runner.py` with the `--coverage` argument tracks which RPCs are
+Running `test/functional/test_runner.py` with the `--coverage` argument tracks which RPCs are
 called by the tests and prints a report of uncovered RPCs in the summary. This
 can be used (along with the `--extended` argument) to find out which RPCs we
 don't have test cases for.
@@ -24,24 +23,18 @@ don't have test cases for.
 - The oldest supported Python version is specified in [doc/dependencies.md](/doc/dependencies.md).
   Consider using [pyenv](https://github.com/pyenv/pyenv), which checks [.python-version](/.python-version),
   to prevent accidentally introducing modern syntax from an unsupported Python version.
-  The CI linter job also checks this, but [possibly not in all cases](https://github.com/bitcoin/bitcoin/pull/14884#discussion_r239585126).
-- See [the python lint script](/test/lint/lint-python.py) that checks for violations that
+  The Travis linter also checks this, but [possibly not in all cases](https://github.com/bitcoin/bitcoin/pull/14884#discussion_r239585126).
+- See [the python lint script](/test/lint/lint-python.sh) that checks for violations that
   could lead to bugs and issues in the test code.
 - Use [type hints](https://docs.python.org/3/library/typing.html) in your code to improve code readability
   and to detect possible bugs earlier.
-- Avoid wildcard imports.
-- If more than one name from a module is needed, use lexicographically sorted multi-line imports
-  in order to reduce the possibility of potential merge conflicts.
+- Avoid wildcard imports
 - Use a module-level docstring to describe what the test is testing, and how it
   is testing it.
 - When subclassing the BitcoinTestFramework, place overrides for the
   `set_test_params()`, `add_options()` and `setup_xxxx()` methods at the top of
   the subclass, then locally-defined helper methods, then the `run_test()` method.
-- Use `f'{x}'` for string formatting in preference to `'{}'.format(x)` or `'%s' % x`.
-- Use `platform.system()` for detecting the running operating system and `os.name` to
-  check whether it's a POSIX system (see also the `skip_if_platform_not_{linux,posix}`
-  methods in the `BitcoinTestFramework` class, which can be used to skip a whole test
-  depending on the platform).
+- Use `'{}'.format(x)` for string formatting, not `'%s' % x`.
 
 #### Naming guidelines
 
@@ -70,13 +63,10 @@ don't have test cases for.
 - Avoid stop-starting the nodes multiple times during the test if possible. A
   stop-start takes several seconds, so doing it several times blows up the
   runtime of the test.
-- Set the `self.setup_clean_chain` variable in `set_test_params()` to `True` to
-  initialize an empty blockchain and start from the Genesis block, rather than
-  load a premined blockchain from cache with the default value of `False`. The
-  cached data directories contain a 200-block pre-mined blockchain with the
-  spendable mining rewards being split between four nodes. Each node has 25
-  mature block subsidies (25x50=1250 BTC) in its wallet. Using them is much more
-  efficient than mining blocks in your test.
+- Set the `self.setup_clean_chain` variable in `set_test_params()` to control whether
+  or not to use the cached data directories. The cached data directories
+  contain a 200-block pre-mined blockchain and wallets for four nodes. Each node
+  has 25 mature blocks (25x50=1250 BTC) in its wallet.
 - When calling RPCs with lots of arguments, consider using named keyword
   arguments instead of positional arguments to make the intent of the call
   clear to readers.
@@ -183,7 +173,7 @@ way is the use the `profile_with_perf` context manager, e.g.
 with node.profile_with_perf("send-big-msgs"):
     # Perform activity on the node you're interested in profiling, e.g.:
     for _ in range(10000):
-        node.p2ps[0].send_without_ping(some_large_message)
+        node.p2ps[0].send_message(some_large_message)
 ```
 
 To see useful textual output, run
@@ -195,5 +185,5 @@ perf report -i /path/to/datadir/send-big-msgs.perf.data.xxxx --stdio | c++filt |
 #### See also:
 
 - [Installing perf](https://askubuntu.com/q/50145)
-- [Perf examples](https://www.brendangregg.com/perf.html)
+- [Perf examples](http://www.brendangregg.com/perf.html)
 - [Hotspot](https://github.com/KDAB/hotspot): a GUI for perf output analysis

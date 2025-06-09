@@ -1,13 +1,12 @@
 // Copyright 2014 BitPay Inc.
 // Distributed under the MIT software license, see the accompanying
-// file COPYING or https://opensource.org/licenses/mit-license.php.
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <univalue.h>
-#include <univalue_escapes.h>
-
-#include <memory>
-#include <string>
-#include <vector>
+#include <iomanip>
+#include <sstream>
+#include <stdio.h>
+#include "univalue.h"
+#include "univalue_escapes.h"
 
 static std::string json_escape(const std::string& inS)
 {
@@ -15,19 +14,18 @@ static std::string json_escape(const std::string& inS)
     outS.reserve(inS.size() * 2);
 
     for (unsigned int i = 0; i < inS.size(); i++) {
-        unsigned char ch = static_cast<unsigned char>(inS[i]);
+        unsigned char ch = inS[i];
         const char *escStr = escapes[ch];
 
         if (escStr)
             outS += escStr;
         else
-            outS += static_cast<char>(ch);
+            outS += ch;
     }
 
     return outS;
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 std::string UniValue::write(unsigned int prettyIndent,
                             unsigned int indentLevel) const
 {
@@ -67,7 +65,6 @@ static void indentStr(unsigned int prettyIndent, unsigned int indentLevel, std::
     s.append(prettyIndent * indentLevel, ' ');
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 void UniValue::writeArray(unsigned int prettyIndent, unsigned int indentLevel, std::string& s) const
 {
     s += "[";
@@ -90,7 +87,6 @@ void UniValue::writeArray(unsigned int prettyIndent, unsigned int indentLevel, s
     s += "]";
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
 void UniValue::writeObject(unsigned int prettyIndent, unsigned int indentLevel, std::string& s) const
 {
     s += "{";

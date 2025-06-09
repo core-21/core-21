@@ -194,7 +194,7 @@ class WindowsRandomAccessFile : public RandomAccessFile {
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
     DWORD bytes_read = 0;
-    OVERLAPPED overlapped = {};
+    OVERLAPPED overlapped = {0};
 
     overlapped.OffsetHigh = static_cast<DWORD>(offset >> 32);
     overlapped.Offset = static_cast<DWORD>(offset);
@@ -798,17 +798,13 @@ class SingletonEnv {
  public:
   SingletonEnv() {
 #if !defined(NDEBUG)
-    env_initialized_.store(true, std::memory_order_relaxed);
+    env_initialized_.store(true, std::memory_order::memory_order_relaxed);
 #endif  // !defined(NDEBUG)
     static_assert(sizeof(env_storage_) >= sizeof(EnvType),
                   "env_storage_ will not fit the Env");
-    static_assert(std::is_standard_layout_v<SingletonEnv<EnvType>>);
-    static_assert(
-        offsetof(SingletonEnv<EnvType>, env_storage_) % alignof(EnvType) == 0,
-        "env_storage_ does not meet the Env's alignment needs");
-    static_assert(alignof(SingletonEnv<EnvType>) % alignof(EnvType) == 0,
+    static_assert(alignof(decltype(env_storage_)) >= alignof(EnvType),
                   "env_storage_ does not meet the Env's alignment needs");
-    new (env_storage_) EnvType();
+    new (&env_storage_) EnvType();
   }
   ~SingletonEnv() = default;
 
@@ -819,12 +815,13 @@ class SingletonEnv {
 
   static void AssertEnvNotInitialized() {
 #if !defined(NDEBUG)
-    assert(!env_initialized_.load(std::memory_order_relaxed));
+    assert(!env_initialized_.load(std::memory_order::memory_order_relaxed));
 #endif  // !defined(NDEBUG)
   }
 
  private:
-  alignas(EnvType) char env_storage_[sizeof(EnvType)];
+  typename std::aligned_storage<sizeof(EnvType), alignof(EnvType)>::type
+      env_storage_;
 #if !defined(NDEBUG)
   static std::atomic<bool> env_initialized_;
 #endif  // !defined(NDEBUG)

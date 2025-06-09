@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2011-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,11 +14,14 @@
 #include <QDialog>
 #include <QString>
 
-#include <bitcoin-build-config.h> // IWYU pragma: keep
+#if defined(HAVE_CONFIG_H)
+#include <config/bitcoin-config.h> /* for USE_QRCODE */
+#endif
 
-ReceiveRequestDialog::ReceiveRequestDialog(QWidget* parent)
-    : QDialog(parent, GUIUtil::dialog_flags),
-      ui(new Ui::ReceiveRequestDialog)
+ReceiveRequestDialog::ReceiveRequestDialog(QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::ReceiveRequestDialog),
+    model(nullptr)
 {
     ui->setupUi(this);
     GUIUtil::handleCloseWindowShortcut(this);
@@ -86,12 +89,6 @@ void ReceiveRequestDialog::setInfo(const SendCoinsRecipient &_info)
         ui->wallet_tag->hide();
         ui->wallet_content->hide();
     }
-
-    ui->btnVerify->setVisible(model->wallet().hasExternalSigner());
-
-    connect(ui->btnVerify, &QPushButton::clicked, [this] {
-        model->displayAddress(info.address.toStdString());
-    });
 }
 
 void ReceiveRequestDialog::updateDisplayUnit()

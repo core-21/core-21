@@ -1,8 +1,7 @@
-// Copyright (c) 2013-2022 The Bitcoin Core developers
+// Copyright (c) 2013-2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <common/system.h>
 #include <consensus/tx_check.h>
 #include <consensus/validation.h>
 #include <hash.h>
@@ -11,16 +10,18 @@
 #include <serialize.h>
 #include <streams.h>
 #include <test/data/sighash.json.h>
-#include <test/util/json.h>
-#include <test/util/random.h>
 #include <test/util/setup_common.h>
 #include <util/strencodings.h>
+#include <util/system.h>
+#include <version.h>
 
 #include <iostream>
 
 #include <boost/test/unit_test.hpp>
 
 #include <univalue.h>
+
+extern UniValue read_json(const std::string& jsondata);
 
 // Old script.cpp SignatureHash function
 uint256 static SignatureHashOld(CScript scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType)
@@ -77,46 +78,43 @@ uint256 static SignatureHashOld(CScript scriptCode, const CTransaction& txTo, un
     }
 
     // Serialize and hash
-    HashWriter ss{};
-    ss << TX_NO_WITNESS(txTmp) << nHashType;
+    CHashWriter ss(SER_GETHASH, SERIALIZE_TRANSACTION_NO_WITNESS);
+    ss << txTmp << nHashType;
     return ss.GetHash();
 }
 
-struct SigHashTest : BasicTestingSetup {
-void RandomScript(CScript &script) {
+void static RandomScript(CScript &script) {
     static const opcodetype oplist[] = {OP_FALSE, OP_1, OP_2, OP_3, OP_CHECKSIG, OP_IF, OP_VERIF, OP_RETURN, OP_CODESEPARATOR};
     script = CScript();
-    int ops = (m_rng.randrange(10));
+    int ops = (InsecureRandRange(10));
     for (int i=0; i<ops; i++)
-        script << oplist[m_rng.randrange(std::size(oplist))];
+        script << oplist[InsecureRandRange(sizeof(oplist)/sizeof(oplist[0]))];
 }
 
-void RandomTransaction(CMutableTransaction& tx, bool fSingle)
-{
-    tx.version = m_rng.rand32();
+void static RandomTransaction(CMutableTransaction &tx, bool fSingle) {
+    tx.nVersion = InsecureRand32();
     tx.vin.clear();
     tx.vout.clear();
-    tx.nLockTime = (m_rng.randbool()) ? m_rng.rand32() : 0;
-    int ins = (m_rng.randbits(2)) + 1;
-    int outs = fSingle ? ins : (m_rng.randbits(2)) + 1;
+    tx.nLockTime = (InsecureRandBool()) ? InsecureRand32() : 0;
+    int ins = (InsecureRandBits(2)) + 1;
+    int outs = fSingle ? ins : (InsecureRandBits(2)) + 1;
     for (int in = 0; in < ins; in++) {
-        tx.vin.emplace_back();
+        tx.vin.push_back(CTxIn());
         CTxIn &txin = tx.vin.back();
-        txin.prevout.hash = Txid::FromUint256(m_rng.rand256());
-        txin.prevout.n = m_rng.randbits(2);
+        txin.prevout.hash = InsecureRand256();
+        txin.prevout.n = InsecureRandBits(2);
         RandomScript(txin.scriptSig);
-        txin.nSequence = (m_rng.randbool()) ? m_rng.rand32() : std::numeric_limits<uint32_t>::max();
+        txin.nSequence = (InsecureRandBool()) ? InsecureRand32() : std::numeric_limits<uint32_t>::max();
     }
     for (int out = 0; out < outs; out++) {
-        tx.vout.emplace_back();
+        tx.vout.push_back(CTxOut());
         CTxOut &txout = tx.vout.back();
-        txout.nValue = RandMoney(m_rng);
+        txout.nValue = InsecureRandRange(100000000);
         RandomScript(txout.scriptPubKey);
     }
 }
-}; // struct SigHashTest
 
-BOOST_FIXTURE_TEST_SUITE(sighash_tests, SigHashTest)
+BOOST_FIXTURE_TEST_SUITE(sighash_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(sighash_test)
 {
@@ -128,19 +126,19 @@ BOOST_AUTO_TEST_CASE(sighash_test)
     int nRandomTests = 50000;
     #endif
     for (int i=0; i<nRandomTests; i++) {
-        int nHashType{int(m_rng.rand32())};
+        int nHashType = InsecureRand32();
         CMutableTransaction txTo;
         RandomTransaction(txTo, (nHashType & 0x1f) == SIGHASH_SINGLE);
         CScript scriptCode;
         RandomScript(scriptCode);
-        int nIn = m_rng.randrange(txTo.vin.size());
+        int nIn = InsecureRandRange(txTo.vin.size());
 
         uint256 sh, sho;
         sho = SignatureHashOld(scriptCode, CTransaction(txTo), nIn, nHashType);
         sh = SignatureHash(scriptCode, txTo, nIn, nHashType, 0, SigVersion::BASE);
         #if defined(PRINT_SIGHASH_JSON)
-        DataStream ss;
-        ss << TX_WITH_WITNESS(txTo);
+        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+        ss << txTo;
 
         std::cout << "\t[\"" ;
         std::cout << HexStr(ss) << "\", \"";
@@ -163,10 +161,10 @@ BOOST_AUTO_TEST_CASE(sighash_test)
 // Goal: check that SignatureHash generates correct hash
 BOOST_AUTO_TEST_CASE(sighash_from_data)
 {
-    UniValue tests = read_json(json_tests::sighash);
+    UniValue tests = read_json(std::string(json_tests::sighash, json_tests::sighash + sizeof(json_tests::sighash)));
 
     for (unsigned int idx = 0; idx < tests.size(); idx++) {
-        const UniValue& test = tests[idx];
+        UniValue test = tests[idx];
         std::string strTest = test.write();
         if (test.size() < 1) // Allow for extra stuff (useful for comments)
         {
@@ -185,12 +183,12 @@ BOOST_AUTO_TEST_CASE(sighash_from_data)
           // deserialize test data
           raw_tx = test[0].get_str();
           raw_script = test[1].get_str();
-          nIn = test[2].getInt<int>();
-          nHashType = test[3].getInt<int>();
+          nIn = test[2].get_int();
+          nHashType = test[3].get_int();
           sigHashHex = test[4].get_str();
 
-          DataStream stream(ParseHex(raw_tx));
-          stream >> TX_WITH_WITNESS(tx);
+          CDataStream stream(ParseHex(raw_tx), SER_NETWORK, PROTOCOL_VERSION);
+          stream >> tx;
 
           TxValidationState state;
           BOOST_CHECK_MESSAGE(CheckTransaction(*tx, state), strTest);

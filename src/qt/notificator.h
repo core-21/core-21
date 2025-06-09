@@ -1,11 +1,13 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2018 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_NOTIFICATOR_H
 #define BITCOIN_QT_NOTIFICATOR_H
 
-#include <bitcoin-build-config.h> // IWYU pragma: keep
+#if defined(HAVE_CONFIG_H)
+#include <config/bitcoin-config.h>
+#endif
 
 #include <QIcon>
 #include <QObject>
@@ -59,15 +61,15 @@ private:
         UserNotificationCenter      /**< Use the 10.8+ User Notification Center (Mac only) */
     };
     QString programName;
-    Mode mode{None};
+    Mode mode;
     QSystemTrayIcon *trayIcon;
 #ifdef USE_DBUS
-    QDBusInterface* interface{nullptr};
+    QDBusInterface *interface;
 
     void notifyDBus(Class cls, const QString &title, const QString &text, const QIcon &icon, int millisTimeout);
 #endif
     void notifySystray(Class cls, const QString &title, const QString &text, int millisTimeout);
-#ifdef Q_OS_MACOS
+#ifdef Q_OS_MAC
     void notifyMacUserNotificationCenter(const QString &title, const QString &text);
 #endif
 };

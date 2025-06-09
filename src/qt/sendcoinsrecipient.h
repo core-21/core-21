@@ -1,11 +1,15 @@
-// Copyright (c) 2011-2021 The Bitcoin Core developers
+// Copyright (c) 2011-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_SENDCOINSRECIPIENT_H
 #define BITCOIN_QT_SENDCOINSRECIPIENT_H
 
-#include <consensus/amount.h>
+#if defined(HAVE_CONFIG_H)
+#include <config/bitcoin-config.h>
+#endif
+
+#include <amount.h>
 #include <serialize.h>
 
 #include <string>

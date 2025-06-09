@@ -10,9 +10,10 @@ First, in terms of structure, there is no particular concept of "Bitcoin Core
 developers" in the sense of privileged people. Open source often naturally
 revolves around a meritocracy where contributors earn trust from the developer
 community over time. Nevertheless, some hierarchy is necessary for practical
-purposes. As such, there are repository maintainers who are responsible for
-merging pull requests, the [release cycle](/doc/release-process.md), and
-moderation.
+purposes. As such, there are repository "maintainers" who are responsible for
+merging pull requests, as well as a "lead maintainer" who is responsible for the
+release cycle as well as overall merging, moderation and appointment of
+maintainers.
 
 Getting Started
 ---------------
@@ -36,7 +37,8 @@ list or changes that are
 Some of them might no longer be applicable. So if you are interested, but
 unsure, you might want to leave a comment on the issue first.
 
-You may also participate in the [Bitcoin Core PR Review Club](https://bitcoincore.reviews/).
+You may also participate in the weekly
+[Bitcoin Core PR Review Club](https://bitcoincore.reviews/) meeting.
 
 ### Good First Issue Label
 
@@ -55,20 +57,19 @@ Communication Channels
 ----------------------
 
 Most communication about Bitcoin Core development happens on IRC, in the
-`#bitcoin-core-dev` channel on Libera Chat. The easiest way to participate on IRC is
-with the web client, [web.libera.chat](https://web.libera.chat/#bitcoin-core-dev). Chat
+`#bitcoin-core-dev` channel on Freenode. The easiest way to participate on IRC is
+with the web client, [webchat.freenode.net](https://webchat.freenode.net/). Chat
 history logs can be found
-on [https://www.erisian.com.au/bitcoin-core-dev/](https://www.erisian.com.au/bitcoin-core-dev/)
-and [https://gnusha.org/bitcoin-core-dev/](https://gnusha.org/bitcoin-core-dev/).
+on [http://www.erisian.com.au/bitcoin-core-dev/](http://www.erisian.com.au/bitcoin-core-dev/)
+and [http://gnusha.org/bitcoin-core-dev/](http://gnusha.org/bitcoin-core-dev/).
 
 Discussion about codebase improvements happens in GitHub issues and pull
 requests.
 
 The developer
-[mailing list](https://groups.google.com/g/bitcoindev)
+[mailing list](https://lists.linuxfoundation.org/mailman/listinfo/bitcoin-dev)
 should be used to discuss complicated or controversial consensus or P2P protocol changes before working on
 a patch set.
-Archives can be found on [https://gnusha.org/pi/bitcoindev/](https://gnusha.org/pi/bitcoindev/).
 
 
 Contributor Workflow
@@ -80,7 +81,7 @@ facilitates social contribution, easy testing and peer review.
 
 To contribute a patch, the workflow is as follows:
 
-  1. Fork repository ([only for the first time](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/fork-a-repo))
+  1. Fork repository ([only for the first time](https://help.github.com/en/articles/fork-a-repo))
   1. Create topic branch
   1. Commit patches
 
@@ -118,10 +119,10 @@ own without warnings, errors, regressions, or test failures.
 
 Commit messages should be verbose by default consisting of a short subject line
 (50 chars max), a blank line and detailed explanatory text as separate
-paragraph(s), unless the title alone is self-explanatory (like "Correct typo
+paragraph(s), unless the title alone is self-explanatory (like "Corrected typo
 in init.cpp") in which case a single title line is sufficient. Commit messages should be
 helpful to people reading your code in the future, so explain the reasoning for
-your decisions. Further explanation [here](https://cbea.ms/git-commit/).
+your decisions. Further explanation [here](https://chris.beams.io/posts/git-commit/).
 
 If a particular commit references another issue, please add the reference. For
 example: `refs #1234` or `fixes #4321`. Using the `fixes` or `closes` keywords
@@ -148,12 +149,11 @@ the pull request affects. Valid areas as:
   - `net` or `p2p` for changes to the peer-to-peer network code
   - `refactor` for structural changes that do not change behavior
   - `rpc`, `rest` or `zmq` for changes to the RPC, REST or ZMQ APIs
-  - `contrib` or `cli` for changes to the scripts and tools
+  - `script` for changes to the scripts and tools
   - `test`, `qa` or `ci` for changes to the unit tests, QA tests or CI code
   - `util` or `lib` for changes to the utils or libraries
   - `wallet` for changes to the wallet code
-  - `build` for changes to CMake
-  - `guix` for changes to the GUIX reproducible builds
+  - `build` for changes to the GNU Autotools or reproducible builds
 
 Examples:
 
@@ -182,27 +182,22 @@ for more information on helping with translations.
 ### Work in Progress Changes and Requests for Comments
 
 If a pull request is not to be considered for merging (yet), please
-prefix the title with [WIP] or use [Tasks Lists](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax#task-lists)
+prefix the title with [WIP] or use [Tasks Lists](https://help.github.com/articles/basic-writing-and-formatting-syntax/#task-lists)
 in the body of the pull request to indicate tasks are pending.
 
 ### Address Feedback
 
 At this stage, one should expect comments and review from other contributors. You
 can add more commits to your pull request by committing them locally and pushing
-to your fork.
+to your fork until you have satisfied all feedback.
 
-You are expected to reply to any review comments before your pull request is
-merged. You may update the code or reject the feedback if you do not agree with
-it, but you should express so in a reply. If there is outstanding feedback and
-you are not actively working on it, your pull request may be closed.
-
-Please refer to the [peer review](#peer-review) section below for more details.
+Note: Code review is a burdensome but important part of the development process, and as such, certain types of pull requests are rejected. In general, if the **improvements** do not warrant the **review effort** required, the PR has a high chance of being rejected. It is up to the PR author to convince the reviewers that the changes warrant the review effort, and if reviewers are "Concept NACK'ing" the PR, the author may need to present arguments and/or do research backing their suggested changes.
 
 ### Squashing Commits
 
 If your pull request contains fixup commits (commits that change the same line of code repeatedly) or too fine-grained
 commits, you may be asked to [squash](https://git-scm.com/docs/git-rebase#_interactive_mode) your commits
-before it will be reviewed. The basic squashing workflow is shown below.
+before it will be merged. The basic squashing workflow is shown below.
 
     git checkout your_branch_name
     git rebase -i HEAD~n
@@ -216,9 +211,9 @@ Please update the resulting commit message, if needed. It should read as a
 coherent message. In most cases, this means not just listing the interim
 commits.
 
-If your change contains a merge commit, the above workflow may not work and you
-will need to remove the merge commit first. See the next section for details on
-how to rebase.
+If you have problems with squashing or other git workflows, you can enable
+"Allow edits from maintainers" in the right-hand sidebar of the GitHub web
+interface and ask for help in the pull request.
 
 Please refrain from creating several pull requests for the same change.
 Use the pull request that is already open (or was created earlier) to amend
@@ -231,9 +226,7 @@ pull request to pull request.
 ### Rebasing Changes
 
 When a pull request conflicts with the target branch, you may be asked to rebase it on top of the current target branch.
-
-    git fetch https://github.com/bitcoin/bitcoin  # Fetch the latest upstream commit
-    git rebase FETCH_HEAD  # Rebuild commits on top of the new base
+The `git rebase` command will take care of rebuilding your commits on top of the new base.
 
 This project aims to have a clean git history, where code changes are only made in non-merge commits. This simplifies
 auditability because merge commits can be assumed to not contain arbitrary code changes. Merge commits should be signed,
@@ -294,7 +287,7 @@ projects such as libsecp256k1), and is not to be confused with overall Bitcoin
 Network Protocol consensus changes.
 
 Whether a pull request is merged into Bitcoin Core rests with the project merge
-maintainers.
+maintainers and ultimately the project lead.
 
 Maintainers will take into consideration if a patch is in line with the general
 principles of the project; meets the minimum standards for inclusion; and will
@@ -328,14 +321,6 @@ test out the patch set and opine on the technical merits of the patch. Project
 maintainers take into account the peer review when determining if there is
 consensus to merge a pull request (remember that discussions may have been
 spread out over GitHub, mailing list and IRC discussions).
-
-Code review is a burdensome but important part of the development process, and
-as such, certain types of pull requests are rejected. In general, if the
-**improvements** do not warrant the **review effort** required, the PR has a
-high chance of being rejected. It is up to the PR author to convince the
-reviewers that the changes warrant the review effort, and if reviewers are
-"Concept NACK'ing" the PR, the author may need to present arguments and/or do
-research backing their suggested changes.
 
 #### Conceptual Review
 
@@ -401,7 +386,7 @@ about:
   - It may be because your code is too complex for all but a few people, and those people
     may not have realized your pull request even exists. A great way to find people who
     are qualified and care about the code you are touching is the
-    [Git Blame feature](https://docs.github.com/en/repositories/working-with-files/using-files/viewing-and-understanding-files). Simply
+    [Git Blame feature](https://help.github.com/articles/tracing-changes-in-a-file/). Simply
     look up who last modified the code you are changing and see if you can find
     them and give them a nudge. Don't be incessant about the nudging, though.
   - Finally, if all else fails, ask on IRC or elsewhere for someone to give your pull request
@@ -417,8 +402,11 @@ Backporting
 
 Security and bug fixes can be backported from `master` to release
 branches.
-Maintainers will do backports in batches and
-use the proper `Needs backport (...)` labels
+If the backport is non-trivial, it may be appropriate to open an
+additional PR to backport the change, but only after the original PR
+has been merged.
+Otherwise, backports will be done in batches and
+the maintainers will use the proper `Needs backport (...)` labels
 when needed (the original author does not need to worry about it).
 
 A backport should contain the following metadata in the commit body:
@@ -433,6 +421,11 @@ https://github.com/bitcoin/bitcoin/pull/16189).
 
 Also see the [backport.py script](
 https://github.com/bitcoin-core/bitcoin-maintainer-tools#backport).
+
+Release Policy
+--------------
+
+The project leader is the release manager for each Bitcoin Core release.
 
 Copyright
 ---------

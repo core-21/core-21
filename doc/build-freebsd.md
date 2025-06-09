@@ -1,100 +1,61 @@
-# FreeBSD Build Guide
+FreeBSD build guide
+======================
+(updated for FreeBSD 12.0)
 
-**Updated for FreeBSD [14.0](https://www.freebsd.org/releases/14.0R/announce/)**
+This guide describes how to build bitcoind and command-line utilities on FreeBSD.
 
-This guide describes how to build bitcoind, command-line utilities, and GUI on FreeBSD.
+This guide does not contain instructions for building the GUI.
 
 ## Preparation
 
-### 1. Install Required Dependencies
-Run the following as root to install the base dependencies for building.
+You will need the following dependencies, which can be installed as root via pkg:
 
 ```bash
-pkg install boost-libs cmake git libevent pkgconf
+pkg install autoconf automake boost-libs git gmake libevent libtool pkgconf
+
+git clone https://github.com/bitcoin/bitcoin.git
+```
+
+In order to run the test suite (recommended), you will need to have Python 3 installed:
+
+```bash
+pkg install python3
 ```
 
 See [dependencies.md](dependencies.md) for a complete overview.
 
-### 2. Clone Bitcoin Repo
-Now that `git` and all the required dependencies are installed, let's clone the Bitcoin Core repository to a directory. All build scripts and commands will run from this directory.
-```bash
-git clone https://github.com/bitcoin/bitcoin.git
-```
+### Building BerkeleyDB
 
-### 3. Install Optional Dependencies
-
-#### Wallet Dependencies
-It is not necessary to build wallet functionality to run either `bitcoind` or `bitcoin-qt`.
-
-###### Descriptor Wallet Support
-
-`sqlite3` is required to support [descriptor wallets](descriptors.md).
-Skip if you don't intend to use descriptor wallets.
-```bash
-pkg install sqlite3
-```
-
-#### GUI Dependencies
-###### Qt6
-
-Bitcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
-the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+BerkeleyDB is only necessary for the wallet functionality. To skip this, pass
+`--disable-wallet` to `./configure` and skip to the next section.
 
 ```bash
-pkg install qt6-buildtools qt6-core qt6-gui qt6-linguisttools qt6-testlib qt6-widgets
+./contrib/install_db4.sh `pwd`
+export BDB_PREFIX="$PWD/db4"
 ```
-
-###### libqrencode
-
-The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
-
-```bash
-pkg install libqrencode
-```
-
-Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
-
----
-
-#### Notifications
-###### ZeroMQ
-
-Bitcoin Core can provide notifications via ZeroMQ. If the package is installed, support will be compiled in.
-```bash
-pkg install libzmq4
-```
-
-#### Test Suite Dependencies
-There is an included test suite that is useful for testing code changes when developing.
-To run the test suite (recommended), you will need to have Python 3 installed:
-
-```bash
-pkg install python3 databases/py-sqlite3 net/py-pyzmq
-```
----
 
 ## Building Bitcoin Core
 
-### 1. Configuration
+**Important**: Use `gmake` (the non-GNU `make` will exit with an error).
 
-There are many ways to configure Bitcoin Core, here are a few common examples:
-
-##### Descriptor Wallet and GUI:
-This enables the GUI, assuming `sqlite` and `qt` are installed.
+With wallet:
 ```bash
-cmake -B build -DBUILD_GUI=ON
+./autogen.sh
+./configure --with-gui=no \
+    BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" \
+    BDB_CFLAGS="-I${BDB_PREFIX}/include" \
+    MAKE=gmake
 ```
 
-Run `cmake -B build -LH` to see the full list of available options.
-
-##### No Wallet or GUI
+Without wallet:
 ```bash
-cmake -B build -DENABLE_WALLET=OFF
+./autogen.sh
+./configure --with-gui=no --disable-wallet MAKE=gmake
 ```
 
-### 2. Compile
+followed by:
 
 ```bash
-cmake --build build     # Use "-j N" for N parallel jobs.
-ctest --test-dir build  # Use "-j N" for N parallel tests. Some tests are disabled if Python 3 is not available.
+gmake # use -jX here for parallelism
+gmake check # Run tests if Python 3 is available
 ```

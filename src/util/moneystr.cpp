@@ -1,32 +1,21 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2022 The Bitcoin Core developers
+// Copyright (c) 2009-2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <util/moneystr.h>
 
-#include <consensus/amount.h>
 #include <tinyformat.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 
-#include <cstdint>
-#include <optional>
-
-using util::ContainsNoNUL;
-using util::TrimString;
-
-std::string FormatMoney(const CAmount n)
+std::string FormatMoney(const CAmount& n)
 {
     // Note: not using straight sprintf here because we do NOT want
     // localized number formatting.
-    static_assert(COIN > 1);
-    int64_t quotient = n / COIN;
-    int64_t remainder = n % COIN;
-    if (n < 0) {
-        quotient = -quotient;
-        remainder = -remainder;
-    }
+    int64_t n_abs = (n > 0 ? n : -n);
+    int64_t quotient = n_abs/COIN;
+    int64_t remainder = n_abs%COIN;
     std::string str = strprintf("%d.%08d", quotient, remainder);
 
     // Right-trim excess zeros before the decimal point:
@@ -37,19 +26,19 @@ std::string FormatMoney(const CAmount n)
         str.erase(str.size()-nTrim, nTrim);
 
     if (n < 0)
-        str.insert(uint32_t{0}, 1, '-');
+        str.insert((unsigned int)0, 1, '-');
     return str;
 }
 
 
-std::optional<CAmount> ParseMoney(const std::string& money_string)
+bool ParseMoney(const std::string& money_string, CAmount& nRet)
 {
-    if (!ContainsNoNUL(money_string)) {
-        return std::nullopt;
+    if (!ValidAsCString(money_string)) {
+        return false;
     }
     const std::string str = TrimString(money_string);
     if (str.empty()) {
-        return std::nullopt;
+        return false;
     }
 
     std::string strWhole;
@@ -69,24 +58,21 @@ std::optional<CAmount> ParseMoney(const std::string& money_string)
             break;
         }
         if (IsSpace(*p))
-            return std::nullopt;
+            return false;
         if (!IsDigit(*p))
-            return std::nullopt;
+            return false;
         strWhole.insert(strWhole.end(), *p);
     }
     if (*p) {
-        return std::nullopt;
+        return false;
     }
     if (strWhole.size() > 10) // guard against 63 bit overflow
-        return std::nullopt;
+        return false;
     if (nUnits < 0 || nUnits > COIN)
-        return std::nullopt;
-    int64_t nWhole = LocaleIndependentAtoi<int64_t>(strWhole);
-    CAmount value = nWhole * COIN + nUnits;
+        return false;
+    int64_t nWhole = atoi64(strWhole);
+    CAmount nValue = nWhole*COIN + nUnits;
 
-    if (!MoneyRange(value)) {
-        return std::nullopt;
-    }
-
-    return value;
+    nRet = nValue;
+    return true;
 }

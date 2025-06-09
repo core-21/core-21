@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-FUZZ_TARGET(block_header)
+void test_one_input(const std::vector<uint8_t>& buffer)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     const std::optional<CBlockHeader> block_header = ConsumeDeserializable<CBlockHeader>(fuzzed_data_provider);
@@ -23,7 +23,7 @@ FUZZ_TARGET(block_header)
     }
     {
         const uint256 hash = block_header->GetHash();
-        constexpr uint256 u256_max{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
+        static const uint256 u256_max(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
         assert(hash != u256_max);
         assert(block_header->GetBlockTime() == block_header->nTime);
         assert(block_header->IsNull() == (block_header->nBits == 0));

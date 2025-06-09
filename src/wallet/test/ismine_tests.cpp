@@ -1,23 +1,18 @@
-// Copyright (c) 2017-2022 The Bitcoin Core developers
+// Copyright (c) 2017-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <key.h>
-#include <key_io.h>
 #include <node/context.h>
 #include <script/script.h>
-#include <script/solver.h>
-#include <script/signingprovider.h>
+#include <script/standard.h>
 #include <test/util/setup_common.h>
-#include <wallet/types.h>
+#include <wallet/ismine.h>
 #include <wallet/wallet.h>
-#include <wallet/test/util.h>
 
 #include <boost/test/unit_test.hpp>
 
-using namespace util::hex_literals;
 
-namespace wallet {
 BOOST_FIXTURE_TEST_SUITE(ismine_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(ismine_standard)
@@ -29,258 +24,397 @@ BOOST_AUTO_TEST_CASE(ismine_standard)
         pubkeys[i] = keys[i].GetPubKey();
     }
 
-    CKey uncompressedKey = GenerateRandomKey(/*compressed=*/false);
+    CKey uncompressedKey;
+    uncompressedKey.MakeNewKey(false);
     CPubKey uncompressedPubkey = uncompressedKey.GetPubKey();
-    std::unique_ptr<interfaces::Chain>& chain = m_node.chain;
+    NodeContext node;
+    std::unique_ptr<interfaces::Chain> chain = interfaces::MakeChain(node);
 
     CScript scriptPubKey;
     isminetype result;
 
-    // P2PK compressed - Descriptor
+    // P2PK compressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pk(" + EncodeSecret(keys[0]) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
-
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForRawPubKey(pubkeys[0]);
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore does not have key
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2PK uncompressed - Descriptor
+    // P2PK uncompressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pk(" + EncodeSecret(uncompressedKey) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
-
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForRawPubKey(uncompressedPubkey);
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore does not have key
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2PKH compressed - Descriptor
+    // P2PKH compressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pkh(" + EncodeSecret(keys[0]) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
-
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForDestination(PKHash(pubkeys[0]));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore does not have key
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2PKH uncompressed - Descriptor
+    // P2PKH uncompressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "pkh(" + EncodeSecret(uncompressedKey) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
-
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
         scriptPubKey = GetScriptForDestination(PKHash(uncompressedPubkey));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore does not have key
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2SH - Descriptor
+    // P2SH
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "sh(pkh(" + EncodeSecret(keys[0]) + "))";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
         CScript redeemScript = GetScriptForDestination(PKHash(pubkeys[0]));
         scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore does not have redeemScript or key
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has redeemScript but no key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has redeemScript and key
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // (P2PKH inside) P2SH inside P2SH (invalid) - Descriptor
+    // (P2PKH inside) P2SH inside P2SH (invalid)
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "sh(sh(" + EncodeSecret(keys[0]) + "))";
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CScript redeemscript_inner = GetScriptForDestination(PKHash(pubkeys[0]));
+        CScript redeemscript = GetScriptForDestination(ScriptHash(redeemscript_inner));
+        scriptPubKey = GetScriptForDestination(ScriptHash(redeemscript));
+
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemscript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemscript_inner));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // (P2PKH inside) P2SH inside P2WSH (invalid) - Descriptor
+    // (P2PKH inside) P2SH inside P2WSH (invalid)
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(sh(" + EncodeSecret(keys[0]) + "))";
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CScript redeemscript = GetScriptForDestination(PKHash(pubkeys[0]));
+        CScript witnessscript = GetScriptForDestination(ScriptHash(redeemscript));
+        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessscript));
+
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessscript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemscript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // P2WPKH inside P2WSH (invalid) - Descriptor
+    // P2WPKH inside P2WSH (invalid)
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(wpkh(" + EncodeSecret(keys[0]) + "))";
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CScript witnessscript = GetScriptForDestination(WitnessV0KeyHash(pubkeys[0]));
+        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessscript));
+
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessscript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // (P2PKH inside) P2WSH inside P2WSH (invalid) - Descriptor
+    // (P2PKH inside) P2WSH inside P2WSH (invalid)
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wsh(wsh(" + EncodeSecret(keys[0]) + "))";
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        CScript witnessscript_inner = GetScriptForDestination(PKHash(pubkeys[0]));
+        CScript witnessscript = GetScriptForDestination(WitnessV0ScriptHash(witnessscript_inner));
+        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessscript));
+
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessscript_inner));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessscript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // P2WPKH compressed - Descriptor
+    // P2WPKH compressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wpkh(" + EncodeSecret(keys[0]) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
 
         scriptPubKey = GetScriptForDestination(WitnessV0KeyHash(pubkeys[0]));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore implicitly has key and P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2WPKH uncompressed (invalid) - Descriptor
+    // P2WPKH uncompressed
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "wpkh(" + EncodeSecret(uncompressedKey) + ")";
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        scriptPubKey = GetScriptForDestination(WitnessV0KeyHash(uncompressedPubkey));
+
+        // Keystore has key, but no P2SH redeemScript
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has key and P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // scriptPubKey multisig - Descriptor
+    // scriptPubKey multisig
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-        std::string desc_str = "multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + ")";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
         scriptPubKey = GetScriptForMultisig(2, {uncompressedPubkey, pubkeys[1]});
-        result = spk_manager->IsMine(scriptPubKey);
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
+
+        // Keystore does not have any keys
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has 1/2 keys
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
+
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has 2/2 keys
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
+
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has 2/2 keys and the script
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // P2SH multisig - Descriptor
+    // P2SH multisig
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-
-        std::string desc_str = "sh(multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + "))";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
 
         CScript redeemScript = GetScriptForMultisig(2, {uncompressedPubkey, pubkeys[1]});
         scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore has no redeemScript
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2WSH multisig with compressed keys - Descriptor
+    // P2WSH multisig with compressed keys
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
 
-        std::string desc_str = "wsh(multi(2," + EncodeSecret(keys[0]) + "," + EncodeSecret(keys[1]) + "))";
+        CScript witnessScript = GetScriptForMultisig(2, {pubkeys[0], pubkeys[1]});
+        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        // Keystore has keys, but no witnessScript or P2SH redeemScript
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
 
-        CScript redeemScript = GetScriptForMultisig(2, {pubkeys[0], pubkeys[1]});
-        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
+        // Keystore has keys and witnessScript, but no P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has keys, witnessScript, P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // P2WSH multisig with uncompressed key (invalid) - Descriptor
+    // P2WSH multisig with uncompressed key
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(uncompressedKey));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
 
-        std::string desc_str = "wsh(multi(2," + EncodeSecret(uncompressedKey) + "," + EncodeSecret(keys[1]) + "))";
+        CScript witnessScript = GetScriptForMultisig(2, {uncompressedPubkey, pubkeys[1]});
+        scriptPubKey = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, false);
-        BOOST_CHECK_EQUAL(spk_manager, nullptr);
+        // Keystore has keys, but no witnessScript or P2SH redeemScript
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has keys and witnessScript, but no P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has keys, witnessScript, P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(scriptPubKey));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // P2WSH multisig wrapped in P2SH - Descriptor
+    // P2WSH multisig wrapped in P2SH
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
-
-        std::string desc_str = "sh(wsh(multi(2," + EncodeSecret(keys[0]) + "," + EncodeSecret(keys[1]) + ")))";
-
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
 
         CScript witnessScript = GetScriptForMultisig(2, {pubkeys[0], pubkeys[1]});
         CScript redeemScript = GetScriptForDestination(WitnessV0ScriptHash(witnessScript));
         scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
+
+        // Keystore has no witnessScript, P2SH redeemScript, or keys
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has witnessScript and P2SH redeemScript, but no keys
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(redeemScript));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddCScript(witnessScript));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+
+        // Keystore has keys, witnessScript, P2SH redeemScript
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[1]));
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
     }
 
-    // Combo - Descriptor
+    // OP_RETURN
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
 
-        std::string desc_str = "combo(" + EncodeSecret(keys[0]) + ")";
+        scriptPubKey.clear();
+        scriptPubKey << OP_RETURN << ToByteVector(pubkeys[0]);
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
-
-        // Test P2PK
-        result = spk_manager->IsMine(GetScriptForRawPubKey(pubkeys[0]));
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-
-        // Test P2PKH
-        result = spk_manager->IsMine(GetScriptForDestination(PKHash(pubkeys[0])));
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-
-        // Test P2SH (combo descriptor does not describe P2SH)
-        CScript redeemScript = GetScriptForDestination(PKHash(pubkeys[0]));
-        scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
-        BOOST_CHECK_EQUAL(result, ISMINE_NO);
-
-        // Test P2WPKH
-        scriptPubKey = GetScriptForDestination(WitnessV0KeyHash(pubkeys[0]));
-        result = spk_manager->IsMine(scriptPubKey);
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-
-        // P2SH-P2WPKH output
-        redeemScript = GetScriptForDestination(WitnessV0KeyHash(pubkeys[0]));
-        scriptPubKey = GetScriptForDestination(ScriptHash(redeemScript));
-        result = spk_manager->IsMine(scriptPubKey);
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
-
-        // Test P2TR (combo descriptor does not describe P2TR)
-        XOnlyPubKey xpk(pubkeys[0]);
-        Assert(xpk.IsFullyValid());
-        TaprootBuilder builder;
-        builder.Finalize(xpk);
-        WitnessV1Taproot output = builder.GetOutput();
-        scriptPubKey = GetScriptForDestination(output);
-        result = spk_manager->IsMine(scriptPubKey);
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
         BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 
-    // Taproot - Descriptor
+    // witness unspendable
     {
-        CWallet keystore(chain.get(), "", CreateMockableWalletDatabase());
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
 
-        std::string desc_str = "tr(" + EncodeSecret(keys[0]) + ")";
+        scriptPubKey.clear();
+        scriptPubKey << OP_0 << ToByteVector(ParseHex("aabb"));
 
-        auto spk_manager = CreateDescriptor(keystore, desc_str, true);
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+    }
 
-        XOnlyPubKey xpk(pubkeys[0]);
-        Assert(xpk.IsFullyValid());
-        TaprootBuilder builder;
-        builder.Finalize(xpk);
-        WitnessV1Taproot output = builder.GetOutput();
-        scriptPubKey = GetScriptForDestination(output);
-        result = spk_manager->IsMine(scriptPubKey);
-        BOOST_CHECK_EQUAL(result, ISMINE_SPENDABLE);
+    // witness unknown
+    {
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+
+        scriptPubKey.clear();
+        scriptPubKey << OP_16 << ToByteVector(ParseHex("aabb"));
+
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
+    }
+
+    // Nonstandard
+    {
+        CWallet keystore(chain.get(), "", CreateDummyWalletDatabase());
+        keystore.SetupLegacyScriptPubKeyMan();
+        LOCK(keystore.GetLegacyScriptPubKeyMan()->cs_KeyStore);
+        BOOST_CHECK(keystore.GetLegacyScriptPubKeyMan()->AddKey(keys[0]));
+
+        scriptPubKey.clear();
+        scriptPubKey << OP_9 << OP_ADD << OP_11 << OP_EQUAL;
+
+        result = keystore.GetLegacyScriptPubKeyMan()->IsMine(scriptPubKey);
+        BOOST_CHECK_EQUAL(result, ISMINE_NO);
     }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
-} // namespace wallet

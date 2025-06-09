@@ -1,12 +1,10 @@
-// Copyright (c) 2019-2022 The Bitcoin Core developers
+// Copyright (c) 2019-2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <amount.h>
 #include <arith_uint256.h>
-#include <common/args.h>
-#include <common/system.h>
 #include <compressor.h>
-#include <consensus/amount.h>
 #include <consensus/merkle.h>
 #include <core_io.h>
 #include <crypto/common.h>
@@ -14,40 +12,40 @@
 #include <key_io.h>
 #include <memusage.h>
 #include <netbase.h>
-#include <policy/policy.h>
 #include <policy/settings.h>
 #include <pow.h>
 #include <protocol.h>
 #include <pubkey.h>
-#include <script/script.h>
+#include <rpc/util.h>
+#include <script/signingprovider.h>
+#include <script/standard.h>
 #include <serialize.h>
 #include <streams.h>
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
 #include <uint256.h>
-#include <univalue.h>
-#include <util/chaintype.h>
 #include <util/check.h>
 #include <util/moneystr.h>
-#include <util/overflow.h>
 #include <util/strencodings.h>
 #include <util/string.h>
+#include <util/system.h>
+#include <util/time.h>
+#include <version.h>
 
 #include <cassert>
 #include <chrono>
+#include <ctime>
 #include <limits>
 #include <set>
 #include <vector>
 
-using util::ToString;
-
-void initialize_integer()
+void initialize()
 {
-    SelectParams(ChainType::REGTEST);
+    SelectParams(CBaseChainParams::REGTEST);
 }
 
-FUZZ_TARGET(integer, .init = initialize_integer)
+void test_one_input(const std::vector<uint8_t>& buffer)
 {
     if (buffer.size() < sizeof(uint256) + sizeof(uint160)) {
         return;
@@ -63,13 +61,13 @@ FUZZ_TARGET(integer, .init = initialize_integer)
     const int16_t i16 = fuzzed_data_provider.ConsumeIntegral<int16_t>();
     const uint8_t u8 = fuzzed_data_provider.ConsumeIntegral<uint8_t>();
     const int8_t i8 = fuzzed_data_provider.ConsumeIntegral<int8_t>();
-    // We cannot assume a specific value of std::is_signed_v<char>:
+    // We cannot assume a specific value of std::is_signed<char>::value:
     // ConsumeIntegral<char>() instead of casting from {u,}int8_t.
     const char ch = fuzzed_data_provider.ConsumeIntegral<char>();
     const bool b = fuzzed_data_provider.ConsumeBool();
 
     const Consensus::Params& consensus_params = Params().GetConsensus();
-    (void)CheckProofOfWorkImpl(u256, u32, consensus_params);
+    (void)CheckProofOfWork(u256, u32, consensus_params);
     if (u64 <= MAX_MONEY) {
         const uint64_t compressed_money_amount = CompressAmount(u64);
         assert(u64 == DecompressAmount(compressed_money_amount));
@@ -78,18 +76,26 @@ FUZZ_TARGET(integer, .init = initialize_integer)
     } else {
         (void)CompressAmount(u64);
     }
-    constexpr uint256 u256_min{"0000000000000000000000000000000000000000000000000000000000000000"};
-    constexpr uint256 u256_max{"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"};
+    static const uint256 u256_min(uint256S("0000000000000000000000000000000000000000000000000000000000000000"));
+    static const uint256 u256_max(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
     const std::vector<uint256> v256{u256, u256_min, u256_max};
     (void)ComputeMerkleRoot(v256);
+    (void)CountBits(u64);
     (void)DecompressAmount(u64);
-    {
-        if (std::optional<CAmount> parsed = ParseMoney(FormatMoney(i64))) {
-            assert(parsed.value() == i64);
+    (void)FormatISO8601Date(i64);
+    (void)FormatISO8601DateTime(i64);
+    // FormatMoney(i) not defined when i == std::numeric_limits<int64_t>::min()
+    if (i64 != std::numeric_limits<int64_t>::min()) {
+        int64_t parsed_money;
+        if (ParseMoney(FormatMoney(i64), parsed_money)) {
+            assert(parsed_money == i64);
         }
     }
     (void)GetSizeOfCompactSize(u64);
     (void)GetSpecialScriptSize(u32);
+    if (!MultiplicationOverflow(i64, static_cast<int64_t>(::nBytesPerSigOp)) && !AdditionOverflow(i64 * ::nBytesPerSigOp, static_cast<int64_t>(4))) {
+        (void)GetVirtualTransactionSize(i64, i64);
+    }
     if (!MultiplicationOverflow(i64, static_cast<int64_t>(u32)) && !AdditionOverflow(i64, static_cast<int64_t>(4)) && !AdditionOverflow(i64 * u32, static_cast<int64_t>(4))) {
         (void)GetVirtualTransactionSize(i64, i64, u32);
     }
@@ -117,14 +123,20 @@ FUZZ_TARGET(integer, .init = initialize_integer)
         assert(dynamic_usage == incremental_dynamic_usage * i64s.size());
     }
     (void)MillisToTimeval(i64);
+    const double d = ser_uint64_to_double(u64);
+    assert(ser_double_to_uint64(d) == u64);
+    const float f = ser_uint32_to_float(u32);
+    assert(ser_float_to_uint32(f) == u32);
     (void)SighashToStr(uch);
     (void)SipHashUint256(u64, u64, u256);
     (void)SipHashUint256Extra(u64, u64, u256, u32);
     (void)ToLower(ch);
     (void)ToUpper(ch);
-    {
-        if (std::optional<CAmount> parsed = ParseMoney(ValueFromAmount(i64).getValStr())) {
-            assert(parsed.value() == i64);
+    // ValueFromAmount(i) not defined when i == std::numeric_limits<int64_t>::min()
+    if (i64 != std::numeric_limits<int64_t>::min()) {
+        int64_t parsed_money;
+        if (ParseMoney(ValueFromAmount(i64).getValStr(), parsed_money)) {
+            assert(parsed_money == i64);
         }
     }
     if (i32 >= 0 && i32 <= 16) {
@@ -140,7 +152,7 @@ FUZZ_TARGET(integer, .init = initialize_integer)
 
     const arith_uint256 au256 = UintToArith256(u256);
     assert(ArithToUint256(au256) == u256);
-    assert(uint256::FromHex(au256.GetHex()).value() == u256);
+    assert(uint256S(au256.GetHex()) == u256);
     (void)au256.bits();
     (void)au256.GetCompact(/* fNegative= */ false);
     (void)au256.GetCompact(/* fNegative= */ true);
@@ -152,9 +164,23 @@ FUZZ_TARGET(integer, .init = initialize_integer)
 
     const CKeyID key_id{u160};
     const CScriptID script_id{u160};
+    // CTxDestination = CNoDestination ∪ PKHash ∪ ScriptHash ∪ WitnessV0ScriptHash ∪ WitnessV0KeyHash ∪ WitnessUnknown
+    const PKHash pk_hash{u160};
+    const ScriptHash script_hash{u160};
+    const WitnessV0KeyHash witness_v0_key_hash{u160};
+    const WitnessV0ScriptHash witness_v0_script_hash{u256};
+    const std::vector<CTxDestination> destinations{pk_hash, script_hash, witness_v0_key_hash, witness_v0_script_hash};
+    const SigningProvider store;
+    for (const CTxDestination& destination : destinations) {
+        (void)DescribeAddress(destination);
+        (void)EncodeDestination(destination);
+        (void)GetKeyForDestination(store, destination);
+        (void)GetScriptForDestination(destination);
+        (void)IsValidDestination(destination);
+    }
 
     {
-        DataStream stream{};
+        CDataStream stream(SER_NETWORK, INIT_PROTO_VERSION);
 
         uint256 deserialized_u256;
         stream << u256;
@@ -206,6 +232,11 @@ FUZZ_TARGET(integer, .init = initialize_integer)
         stream >> deserialized_i8;
         assert(i8 == deserialized_i8 && stream.empty());
 
+        char deserialized_ch;
+        stream << ch;
+        stream >> deserialized_ch;
+        assert(ch == deserialized_ch && stream.empty());
+
         bool deserialized_b;
         stream << b;
         stream >> deserialized_b;
@@ -214,11 +245,12 @@ FUZZ_TARGET(integer, .init = initialize_integer)
 
     {
         const ServiceFlags service_flags = (ServiceFlags)u64;
+        (void)HasAllDesirableServiceFlags(service_flags);
         (void)MayHaveUsefulAddressDB(service_flags);
     }
 
     {
-        DataStream stream{};
+        CDataStream stream(SER_NETWORK, INIT_PROTO_VERSION);
 
         ser_writedata64(stream, u64);
         const uint64_t deserialized_u64 = ser_readdata64(stream);
@@ -246,7 +278,7 @@ FUZZ_TARGET(integer, .init = initialize_integer)
     }
 
     {
-        DataStream stream{};
+        CDataStream stream(SER_NETWORK, INIT_PROTO_VERSION);
 
         WriteCompactSize(stream, u64);
         try {

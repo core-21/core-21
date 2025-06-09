@@ -1,20 +1,19 @@
-// Copyright (c) 2020-2021 The Bitcoin Core developers
+// Copyright (c) 2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include <consensus/amount.h>
+#include <amount.h>
 #include <policy/fees.h>
+
+#include <test/util/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
 
-#include <set>
-
-BOOST_AUTO_TEST_SUITE(policy_fee_tests)
+BOOST_FIXTURE_TEST_SUITE(policy_fee_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(FeeRounder)
 {
-    FastRandomContext rng{/*fDeterministic=*/true};
-    FeeFilterRounder fee_rounder{CFeeRate{1000}, rng};
+    FeeFilterRounder fee_rounder{CFeeRate{1000}};
 
     // check that 1000 rounds to 974 or 1071
     std::set<CAmount> results;

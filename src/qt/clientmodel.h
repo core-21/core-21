@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,20 +13,15 @@
 #include <sync.h>
 #include <uint256.h>
 
-#include <netaddress.h>
-
 class BanTableModel;
 class CBlockIndex;
 class OptionsModel;
 class PeerTableModel;
-class PeerTableSortProxy;
 enum class SynchronizationState;
-struct LocalServiceInfo;
 
 namespace interfaces {
 class Handler;
 class Node;
-struct BlockTip;
 }
 
 QT_BEGIN_NAMESPACE
@@ -35,14 +30,9 @@ QT_END_NAMESPACE
 
 enum class BlockSource {
     NONE,
+    REINDEX,
     DISK,
-    NETWORK,
-};
-
-enum class SyncType {
-    HEADER_PRESYNC,
-    HEADER_SYNC,
-    BLOCK_SYNC
+    NETWORK
 };
 
 enum NumConnections {
@@ -61,24 +51,20 @@ public:
     explicit ClientModel(interfaces::Node& node, OptionsModel *optionsModel, QObject *parent = nullptr);
     ~ClientModel();
 
-    void stop();
-
     interfaces::Node& node() const { return m_node; }
     OptionsModel *getOptionsModel();
     PeerTableModel *getPeerTableModel();
-    PeerTableSortProxy* peerTableSortProxy();
     BanTableModel *getBanTableModel();
 
     //! Return number of connections, default is in- and outbound (total)
     int getNumConnections(unsigned int flags = CONNECTIONS_ALL) const;
-    std::map<CNetAddr, LocalServiceInfo> getNetLocalAddresses() const;
     int getNumBlocks() const;
-    uint256 getBestBlockHash() EXCLUSIVE_LOCKS_REQUIRED(!m_cached_tip_mutex);
+    uint256 getBestBlockHash();
     int getHeaderTipHeight() const;
     int64_t getHeaderTipTime() const;
 
-    //! Returns the block source of the current importing/syncing state
-    BlockSource getBlockSource() const;
+    //! Returns enum BlockSource of the current importing/syncing state
+    enum BlockSource getBlockSource() const;
     //! Return warnings to be displayed in status bar
     QString getStatusBarWarnings() const;
 
@@ -101,23 +87,27 @@ public:
 
 private:
     interfaces::Node& m_node;
-    std::vector<std::unique_ptr<interfaces::Handler>> m_event_handlers;
+    std::unique_ptr<interfaces::Handler> m_handler_show_progress;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_num_connections_changed;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_network_active_changed;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_alert_changed;
+    std::unique_ptr<interfaces::Handler> m_handler_banned_list_changed;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_block_tip;
+    std::unique_ptr<interfaces::Handler> m_handler_notify_header_tip;
     OptionsModel *optionsModel;
-    PeerTableModel* peerTableModel{nullptr};
-    PeerTableSortProxy* m_peer_table_sort_proxy{nullptr};
-    BanTableModel* banTableModel{nullptr};
+    PeerTableModel *peerTableModel;
+    BanTableModel *banTableModel;
 
     //! A thread to interact with m_node asynchronously
     QThread* const m_thread;
 
-    void TipChanged(SynchronizationState sync_state, interfaces::BlockTip tip, double verification_progress, SyncType synctype) EXCLUSIVE_LOCKS_REQUIRED(!m_cached_tip_mutex);
     void subscribeToCoreSignals();
     void unsubscribeFromCoreSignals();
 
 Q_SIGNALS:
     void numConnectionsChanged(int count);
-    void numBlocksChanged(int count, const QDateTime& blockDate, double nVerificationProgress, SyncType header, SynchronizationState sync_state);
-    void mempoolSizeChanged(long count, size_t mempoolSizeInBytes, size_t mempoolMaxSizeInBytes);
+    void numBlocksChanged(int count, const QDateTime& blockDate, double nVerificationProgress, bool header, SynchronizationState sync_state);
+    void mempoolSizeChanged(long count, size_t mempoolSizeInBytes);
     void networkActiveChanged(bool networkActive);
     void alertsChanged(const QString &warnings);
     void bytesChanged(quint64 totalBytesIn, quint64 totalBytesOut);
@@ -127,6 +117,12 @@ Q_SIGNALS:
 
     // Show progress dialog e.g. for verifychain
     void showProgress(const QString &title, int nProgress);
+
+public Q_SLOTS:
+    void updateNumConnections(int numConnections);
+    void updateNetworkActive(bool networkActive);
+    void updateAlert();
+    void updateBanlist();
 };
 
 #endif // BITCOIN_QT_CLIENTMODEL_H

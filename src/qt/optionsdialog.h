@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2018 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,6 @@
 #include <QDialog>
 #include <QValidator>
 
-class ClientModel;
 class OptionsModel;
 class QValidatedLineEdit;
 
@@ -46,7 +45,6 @@ public:
         TAB_NETWORK,
     };
 
-    void setClientModel(ClientModel* client_model);
     void setModel(OptionsModel *model);
     void setMapper();
     void setCurrentTab(OptionsDialog::Tab tab);
@@ -59,7 +57,7 @@ private Q_SLOTS:
     void on_okButton_clicked();
     void on_cancelButton_clicked();
 
-    void on_showTrayIcon_stateChanged(int state);
+    void on_hideTrayIcon_stateChanged(int fState);
 
     void togglePruneWarning(bool enabled);
     void showRestartWarning(bool fPersistent = false);
@@ -69,14 +67,12 @@ private Q_SLOTS:
     void updateDefaultProxyNets();
 
 Q_SIGNALS:
-    void proxyIpChecks(QValidatedLineEdit *pUiProxyIp, uint16_t nProxyPort);
-    void quitOnReset();
+    void proxyIpChecks(QValidatedLineEdit *pUiProxyIp, int nProxyPort);
 
 private:
     Ui::OptionsDialog *ui;
-    ClientModel* m_client_model{nullptr};
-    OptionsModel* model{nullptr};
-    QDataWidgetMapper* mapper{nullptr};
+    OptionsModel *model;
+    QDataWidgetMapper *mapper;
 };
 
 #endif // BITCOIN_QT_OPTIONSDIALOG_H

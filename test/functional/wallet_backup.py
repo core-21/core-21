@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2022 The Bitcoin Core developers
+# Copyright (c) 2014-2020 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet backup features.
@@ -33,8 +33,8 @@ and confirm again balances are correct.
 from decimal import Decimal
 import os
 from random import randint
+import shutil
 
-from test_framework.blocktools import COINBASE_MATURITY
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -46,14 +46,13 @@ class WalletBackupTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 4
         self.setup_clean_chain = True
-        # whitelist peers to speed up tx relay / mempool sync
-        self.noban_tx_relay = True
-        # nodes 1, 2, 3 are spenders, let's give them a keypool=100
+        # nodes 1, 2,3 are spenders, let's give them a keypool=100
+        # whitelist all peers to speed up tx relay / mempool sync
         self.extra_args = [
-            ["-keypool=100"],
-            ["-keypool=100"],
-            ["-keypool=100"],
-            [],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
+            ["-whitelist=noban@127.0.0.1", "-keypool=100"],
+            ["-whitelist=noban@127.0.0.1"],
         ]
         self.rpc_timeout = 120
 
@@ -88,7 +87,8 @@ class WalletBackupTest(BitcoinTestFramework):
         # Have the miner (node3) mine a block.
         # Must sync mempools before mining.
         self.sync_mempools()
-        self.generate(self.nodes[3], 1)
+        self.nodes[3].generate(1)
+        self.sync_blocks()
 
     # As above, this mirrors the original bash test.
     def start_three(self, args=()):
@@ -106,61 +106,25 @@ class WalletBackupTest(BitcoinTestFramework):
         self.stop_node(2)
 
     def erase_three(self):
-        for node_num in range(3):
-            (self.nodes[node_num].wallets_path / self.default_wallet_name / self.wallet_data_filename).unlink()
+        os.remove(os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
+        os.remove(os.path.join(self.nodes[1].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
+        os.remove(os.path.join(self.nodes[2].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
 
-    def restore_invalid_wallet(self):
-        node = self.nodes[3]
-        invalid_wallet_file = self.nodes[0].datadir_path / 'invalid_wallet_file.bak'
-        open(invalid_wallet_file, 'a', encoding="utf8").write('invald wallet')
-        wallet_name = "res0"
-        not_created_wallet_file = node.wallets_path / wallet_name
-        error_message = "Wallet file verification failed. Failed to load database path '{}'. Data is not in recognized format.".format(not_created_wallet_file)
-        assert_raises_rpc_error(-18, error_message, node.restorewallet, wallet_name, invalid_wallet_file)
-        assert not not_created_wallet_file.exists()
-
-    def restore_nonexistent_wallet(self):
-        node = self.nodes[3]
-        nonexistent_wallet_file = self.nodes[0].datadir_path / 'nonexistent_wallet.bak'
-        wallet_name = "res0"
-        assert_raises_rpc_error(-8, "Backup file does not exist", node.restorewallet, wallet_name, nonexistent_wallet_file)
-        not_created_wallet_file = node.wallets_path / wallet_name
-        assert not not_created_wallet_file.exists()
-
-    def restore_wallet_existent_name(self):
-        node = self.nodes[3]
-        backup_file = self.nodes[0].datadir_path / 'wallet.bak'
-        wallet_name = "res0"
-        wallet_file = node.wallets_path / wallet_name
-        error_message = "Failed to create database path '{}'. Database already exists.".format(wallet_file)
-        assert_raises_rpc_error(-36, error_message, node.restorewallet, wallet_name, backup_file)
-        assert wallet_file.exists()
-
-    def test_pruned_wallet_backup(self):
-        self.log.info("Test loading backup on a pruned node when the backup was created close to the prune height of the restoring node")
-        node = self.nodes[3]
-        self.restart_node(3, ["-prune=1", "-fastprune=1"])
-        # Ensure the chain tip is at height 214, because this test assume it is.
-        assert_equal(node.getchaintips()[0]["height"], 214)
-        # We need a few more blocks so we can actually get above an realistic
-        # minimal prune height
-        self.generate(node, 50, sync_fun=self.no_op)
-        # Backup created at block height 264
-        node.backupwallet(node.datadir_path / 'wallet_pruned.bak')
-        # Generate more blocks so we can actually prune the older blocks
-        self.generate(node, 300, sync_fun=self.no_op)
-        # This gives us an actual prune height roughly in the range of 220 - 240
-        node.pruneblockchain(250)
-        # The backup should be updated with the latest height (locator) for
-        # the backup to load successfully this close to the prune height
-        node.restorewallet('pruned', node.datadir_path / 'wallet_pruned.bak')
+    def init_three(self):
+        self.init_wallet(0)
+        self.init_wallet(1)
+        self.init_wallet(2)
 
     def run_test(self):
         self.log.info("Generating initial blockchain")
-        self.generate(self.nodes[0], 1)
-        self.generate(self.nodes[1], 1)
-        self.generate(self.nodes[2], 1)
-        self.generate(self.nodes[3], COINBASE_MATURITY)
+        self.nodes[0].generate(1)
+        self.sync_blocks()
+        self.nodes[1].generate(1)
+        self.sync_blocks()
+        self.nodes[2].generate(1)
+        self.sync_blocks()
+        self.nodes[3].generate(100)
+        self.sync_blocks()
 
         assert_equal(self.nodes[0].getbalance(), 50)
         assert_equal(self.nodes[1].getbalance(), 50)
@@ -174,15 +138,22 @@ class WalletBackupTest(BitcoinTestFramework):
 
         self.log.info("Backing up")
 
-        for node_num in range(3):
-            self.nodes[node_num].backupwallet(self.nodes[node_num].datadir_path / 'wallet.bak')
+        self.nodes[0].backupwallet(os.path.join(self.nodes[0].datadir, 'wallet.bak'))
+        self.nodes[1].backupwallet(os.path.join(self.nodes[1].datadir, 'wallet.bak'))
+        self.nodes[2].backupwallet(os.path.join(self.nodes[2].datadir, 'wallet.bak'))
+
+        if not self.options.descriptors:
+            self.nodes[0].dumpwallet(os.path.join(self.nodes[0].datadir, 'wallet.dump'))
+            self.nodes[1].dumpwallet(os.path.join(self.nodes[1].datadir, 'wallet.dump'))
+            self.nodes[2].dumpwallet(os.path.join(self.nodes[2].datadir, 'wallet.dump'))
 
         self.log.info("More transactions")
         for _ in range(5):
             self.do_one_round()
 
         # Generate 101 more blocks, so any fees paid mature
-        self.generate(self.nodes[3], COINBASE_MATURITY + 1)
+        self.nodes[3].generate(101)
+        self.sync_all()
 
         balance0 = self.nodes[0].getbalance()
         balance1 = self.nodes[1].getbalance()
@@ -197,41 +168,63 @@ class WalletBackupTest(BitcoinTestFramework):
         ##
         # Test restoring spender wallets from backups
         ##
-        self.log.info("Restoring wallets on node 3 using backup files")
+        self.log.info("Restoring using wallet.dat")
+        self.stop_three()
+        self.erase_three()
 
-        self.restore_invalid_wallet()
-        self.restore_nonexistent_wallet()
+        # Start node2 with no chain
+        shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'blocks'))
+        shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'chainstate'))
 
-        backup_files = []
-        for node_num in range(3):
-            backup_files.append(self.nodes[node_num].datadir_path / 'wallet.bak')
+        # Restore wallets from backup
+        shutil.copyfile(os.path.join(self.nodes[0].datadir, 'wallet.bak'), os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
+        shutil.copyfile(os.path.join(self.nodes[1].datadir, 'wallet.bak'), os.path.join(self.nodes[1].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
+        shutil.copyfile(os.path.join(self.nodes[2].datadir, 'wallet.bak'), os.path.join(self.nodes[2].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename))
 
-        for idx, backup_file in enumerate(backup_files):
-            self.nodes[3].restorewallet(f'res{idx}', backup_file)
-            assert (self.nodes[3].wallets_path / f'res{idx}').exists()
+        self.log.info("Re-starting nodes")
+        self.start_three()
+        self.sync_blocks()
 
-        res0_rpc = self.nodes[3].get_wallet_rpc("res0")
-        res1_rpc = self.nodes[3].get_wallet_rpc("res1")
-        res2_rpc = self.nodes[3].get_wallet_rpc("res2")
+        assert_equal(self.nodes[0].getbalance(), balance0)
+        assert_equal(self.nodes[1].getbalance(), balance1)
+        assert_equal(self.nodes[2].getbalance(), balance2)
 
-        assert_equal(res0_rpc.getbalance(), balance0)
-        assert_equal(res1_rpc.getbalance(), balance1)
-        assert_equal(res2_rpc.getbalance(), balance2)
+        if not self.options.descriptors:
+            self.log.info("Restoring using dumped wallet")
+            self.stop_three()
+            self.erase_three()
 
-        self.restore_wallet_existent_name()
+            #start node2 with no chain
+            shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'blocks'))
+            shutil.rmtree(os.path.join(self.nodes[2].datadir, self.chain, 'chainstate'))
+
+            self.start_three(["-nowallet"])
+            self.init_three()
+
+            assert_equal(self.nodes[0].getbalance(), 0)
+            assert_equal(self.nodes[1].getbalance(), 0)
+            assert_equal(self.nodes[2].getbalance(), 0)
+
+            self.nodes[0].importwallet(os.path.join(self.nodes[0].datadir, 'wallet.dump'))
+            self.nodes[1].importwallet(os.path.join(self.nodes[1].datadir, 'wallet.dump'))
+            self.nodes[2].importwallet(os.path.join(self.nodes[2].datadir, 'wallet.dump'))
+
+            self.sync_blocks()
+
+            assert_equal(self.nodes[0].getbalance(), balance0)
+            assert_equal(self.nodes[1].getbalance(), balance1)
+            assert_equal(self.nodes[2].getbalance(), balance2)
 
         # Backup to source wallet file must fail
         sourcePaths = [
-            os.path.join(self.nodes[0].wallets_path, self.default_wallet_name, self.wallet_data_filename),
-            os.path.join(self.nodes[0].wallets_path, '.', self.default_wallet_name, self.wallet_data_filename),
-            os.path.join(self.nodes[0].wallets_path, self.default_wallet_name),
-            os.path.join(self.nodes[0].wallets_path)]
+            os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name, self.wallet_data_filename),
+            os.path.join(self.nodes[0].datadir, self.chain, '.', 'wallets', self.default_wallet_name, self.wallet_data_filename),
+            os.path.join(self.nodes[0].datadir, self.chain, 'wallets', self.default_wallet_name),
+            os.path.join(self.nodes[0].datadir, self.chain, 'wallets')]
 
         for sourcePath in sourcePaths:
             assert_raises_rpc_error(-4, "backup failed", self.nodes[0].backupwallet, sourcePath)
 
-        self.test_pruned_wallet_backup()
-
 
 if __name__ == '__main__':
-    WalletBackupTest(__file__).main()
+    WalletBackupTest().main()

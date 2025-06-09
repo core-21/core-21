@@ -1,6 +1,10 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#ifdef HAVE_CONFIG_H
+#include <config/bitcoin-config.h>
+#endif
 
 #include <qt/transactiondesc.h>
 
@@ -9,65 +13,39 @@
 #include <qt/paymentserver.h>
 #include <qt/transactionrecord.h>
 
-#include <common/system.h>
 #include <consensus/consensus.h>
 #include <interfaces/node.h>
 #include <interfaces/wallet.h>
 #include <key_io.h>
-#include <logging.h>
 #include <policy/policy.h>
+#include <script/script.h>
+#include <util/system.h>
 #include <validation.h>
-#include <wallet/types.h>
+#include <wallet/ismine.h>
 
 #include <stdint.h>
 #include <string>
 
-#include <QLatin1String>
-
-using wallet::ISMINE_ALL;
-using wallet::ISMINE_SPENDABLE;
-using wallet::isminetype;
-
-QString TransactionDesc::FormatTxStatus(const interfaces::WalletTxStatus& status, bool inMempool)
+QString TransactionDesc::FormatTxStatus(const interfaces::WalletTx& wtx, const interfaces::WalletTxStatus& status, bool inMempool, int numBlocks)
 {
-    int depth = status.depth_in_main_chain;
-    if (depth < 0) {
-        /*: Text explaining the current status of a transaction, shown in the
-            status field of the details window for this transaction. This status
-            represents an unconfirmed transaction that conflicts with a confirmed
-            transaction. */
-        return tr("conflicted with a transaction with %1 confirmations").arg(-depth);
-    } else if (depth == 0) {
-        QString s;
-        if (inMempool) {
-            /*: Text explaining the current status of a transaction, shown in the
-                status field of the details window for this transaction. This status
-                represents an unconfirmed transaction that is in the memory pool. */
-            s = tr("0/unconfirmed, in memory pool");
-        } else {
-            /*: Text explaining the current status of a transaction, shown in the
-                status field of the details window for this transaction. This status
-                represents an unconfirmed transaction that is not in the memory pool. */
-            s = tr("0/unconfirmed, not in memory pool");
-        }
-        if (status.is_abandoned) {
-            /*: Text explaining the current status of a transaction, shown in the
-                status field of the details window for this transaction. This
-                status represents an abandoned transaction. */
-            s += QLatin1String(", ") + tr("abandoned");
-        }
-        return s;
-    } else if (depth < 6) {
-        /*: Text explaining the current status of a transaction, shown in the
-            status field of the details window for this transaction. This
-            status represents a transaction confirmed in at least one block,
-            but less than 6 blocks. */
-        return tr("%1/unconfirmed").arg(depth);
-    } else {
-        /*: Text explaining the current status of a transaction, shown in the
-            status field of the details window for this transaction. This status
-            represents a transaction confirmed in 6 or more blocks. */
-        return tr("%1 confirmations").arg(depth);
+    if (!status.is_final)
+    {
+        if (wtx.tx->nLockTime < LOCKTIME_THRESHOLD)
+            return tr("Open for %n more block(s)", "", wtx.tx->nLockTime - numBlocks);
+        else
+            return tr("Open until %1").arg(GUIUtil::dateTimeStr(wtx.tx->nLockTime));
+    }
+    else
+    {
+        int nDepth = status.depth_in_main_chain;
+        if (nDepth < 0)
+            return tr("conflicted with a transaction with %1 confirmations").arg(-nDepth);
+        else if (nDepth == 0)
+            return tr("0/unconfirmed, %1").arg((inMempool ? tr("in memory pool") : tr("not in memory pool"))) + (status.is_abandoned ? ", "+tr("abandoned") : "");
+        else if (nDepth < 6)
+            return tr("%1/unconfirmed").arg(nDepth);
+        else
+            return tr("%1 confirmations").arg(nDepth);
     }
 }
 
@@ -99,7 +77,7 @@ bool GetPaymentRequestMerchant(const std::string& pr, QString& merchant)
     return false;
 }
 
-QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord* rec, BitcoinUnit unit)
+QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wallet, TransactionRecord *rec, int unit)
 {
     int numBlocks;
     interfaces::WalletTxStatus status;
@@ -117,7 +95,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
     CAmount nDebit = wtx.debit;
     CAmount nNet = nCredit - nDebit;
 
-    strHTML += "<b>" + tr("Status") + ":</b> " + FormatTxStatus(status, inMempool);
+    strHTML += "<b>" + tr("Status") + ":</b> " + FormatTxStatus(wtx, status, inMempool, numBlocks);
     strHTML += "<br>";
 
     strHTML += "<b>" + tr("Date") + ":</b> " + (nTime ? GUIUtil::dateTimeStr(nTime) : "") + "<br>";
@@ -149,7 +127,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                     strHTML += "<b>" + tr("From") + ":</b> " + tr("unknown") + "<br>";
                     strHTML += "<b>" + tr("To") + ":</b> ";
                     strHTML += GUIUtil::HtmlEscape(rec->address);
-                    QString addressOwned = tr("own address");
+                    QString addressOwned = ismine == ISMINE_SPENDABLE ? tr("own address") : tr("watch-only");
                     if (!name.empty())
                         strHTML += " (" + addressOwned + ", " + tr("label") + ": " + GUIUtil::HtmlEscape(name) + ")";
                     else
@@ -217,6 +195,10 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
 
         if (fAllFromMe)
         {
+            if(fAllFromMe & ISMINE_WATCH_ONLY)
+                strHTML += "<b>" + tr("From") + ":</b> " + tr("watch-only") + "<br>";
+
+            //
             // Debit
             //
             auto mine = wtx.txout_is_mine.begin();
@@ -240,7 +222,9 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                             strHTML += GUIUtil::HtmlEscape(name) + " ";
                         strHTML += GUIUtil::HtmlEscape(EncodeDestination(address));
                         if(toSelf == ISMINE_SPENDABLE)
-                            strHTML += " (" + tr("own address") + ")";
+                            strHTML += " (own address)";
+                        else if(toSelf & ISMINE_WATCH_ONLY)
+                            strHTML += " (watch-only)";
                         strHTML += "<br>";
                     }
                 }
@@ -312,7 +296,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
             if (!GetPaymentRequestMerchant(r.second, merchant)) {
                 merchant.clear();
             } else {
-                merchant = tr("%1 (Certificate was not verified)").arg(merchant);
+                merchant += tr(" (Certificate was not verified)");
             }
             if (!merchant.isNull()) {
                 strHTML += "<b>" + tr("Merchant") + ":</b> " + GUIUtil::HtmlEscape(merchant) + "<br>";
@@ -349,10 +333,12 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
         {
             COutPoint prevout = txin.prevout;
 
-            if (auto prev{node.getUnspentOutput(prevout)}) {
+            Coin prev;
+            if(node.getUnspentOutput(prevout, prev))
+            {
                 {
                     strHTML += "<li>";
-                    const CTxOut& vout = prev->out;
+                    const CTxOut &vout = prev.out;
                     CTxDestination address;
                     if (ExtractDestination(vout.scriptPubKey, address))
                     {
@@ -363,6 +349,7 @@ QString TransactionDesc::toHTML(interfaces::Node& node, interfaces::Wallet& wall
                     }
                     strHTML = strHTML + " " + tr("Amount") + "=" + BitcoinUnits::formatHtmlWithUnit(unit, vout.nValue);
                     strHTML = strHTML + " IsMine=" + (wallet.txoutIsMine(vout) & ISMINE_SPENDABLE ? tr("true") : tr("false")) + "</li>";
+                    strHTML = strHTML + " IsWatchOnly=" + (wallet.txoutIsMine(vout) & ISMINE_WATCH_ONLY ? tr("true") : tr("false")) + "</li>";
                 }
             }
         }

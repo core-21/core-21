@@ -1,55 +1,77 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2021 The Bitcoin Core developers
+// Copyright (c) 2009-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_ADDRDB_H
 #define BITCOIN_ADDRDB_H
 
-#include <net_types.h>
-#include <util/fs.h>
-#include <util/result.h>
+#include <fs.h>
+#include <net_types.h> // For banmap_t
+#include <serialize.h>
 
-#include <memory>
+#include <string>
 #include <vector>
 
-class ArgsManager;
-class AddrMan;
 class CAddress;
-class DataStream;
-class NetGroupManager;
+class CAddrMan;
+class CDataStream;
 
-/** Only used by tests. */
-void ReadFromStream(AddrMan& addr, DataStream& ssPeers);
+class CBanEntry
+{
+public:
+    static const int CURRENT_VERSION=1;
+    int nVersion;
+    int64_t nCreateTime;
+    int64_t nBanUntil;
 
-bool DumpPeerAddresses(const ArgsManager& args, const AddrMan& addr);
+    CBanEntry()
+    {
+        SetNull();
+    }
 
-/** Access to the banlist database (banlist.json) */
+    explicit CBanEntry(int64_t nCreateTimeIn)
+    {
+        SetNull();
+        nCreateTime = nCreateTimeIn;
+    }
+
+    SERIALIZE_METHODS(CBanEntry, obj)
+    {
+        uint8_t ban_reason = 2; //! For backward compatibility
+        READWRITE(obj.nVersion, obj.nCreateTime, obj.nBanUntil, ban_reason);
+    }
+
+    void SetNull()
+    {
+        nVersion = CBanEntry::CURRENT_VERSION;
+        nCreateTime = 0;
+        nBanUntil = 0;
+    }
+};
+
+/** Access to the (IP) address database (peers.dat) */
+class CAddrDB
+{
+private:
+    fs::path pathAddr;
+public:
+    CAddrDB();
+    bool Write(const CAddrMan& addr);
+    bool Read(CAddrMan& addr);
+    static bool Read(CAddrMan& addr, CDataStream& ssPeers);
+};
+
+/** Access to the banlist database (banlist.dat) */
 class CBanDB
 {
 private:
-    /**
-     * JSON key under which the data is stored in the json database.
-     */
-    static constexpr const char* JSON_KEY = "banned_nets";
-
-    const fs::path m_banlist_dat;
-    const fs::path m_banlist_json;
+    const fs::path m_ban_list_path;
 public:
     explicit CBanDB(fs::path ban_list_path);
     bool Write(const banmap_t& banSet);
-
-    /**
-     * Read the banlist from disk.
-     * @param[out] banSet The loaded list. Set if `true` is returned, otherwise it is left
-     * in an undefined state.
-     * @return true on success
-     */
     bool Read(banmap_t& banSet);
 };
-
-/** Returns an error string on failure */
-util::Result<std::unique_ptr<AddrMan>> LoadAddrman(const NetGroupManager& netgroupman, const ArgsManager& args);
 
 /**
  * Dump the anchor IP address database (anchors.dat)

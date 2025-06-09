@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-FUZZ_TARGET(random)
+void test_one_input(const std::vector<uint8_t>& buffer)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     FastRandomContext fast_random_context{ConsumeUInt256(fuzzed_data_provider)};
@@ -26,5 +26,6 @@ FUZZ_TARGET(random)
     (void)fast_random_context();
 
     std::vector<int64_t> integrals = ConsumeRandomLengthIntegralVector<int64_t>(fuzzed_data_provider);
+    Shuffle(integrals.begin(), integrals.end(), fast_random_context);
     std::shuffle(integrals.begin(), integrals.end(), fast_random_context);
 }

@@ -1,6 +1,10 @@
-// Copyright (c) 2011-2022 The Bitcoin Core developers
+// Copyright (c) 2011-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#if defined(HAVE_CONFIG_H)
+#include <config/bitcoin-config.h>
+#endif
 
 #include <qt/paymentserver.h>
 
@@ -9,11 +13,11 @@
 #include <qt/optionsmodel.h>
 
 #include <chainparams.h>
-#include <common/args.h>
 #include <interfaces/node.h>
 #include <key_io.h>
-#include <node/interface_ui.h>
+#include <node/ui_interface.h>
 #include <policy/policy.h>
+#include <util/system.h>
 #include <wallet/wallet.h>
 
 #include <cstdlib>
@@ -22,6 +26,7 @@
 #include <QApplication>
 #include <QByteArray>
 #include <QDataStream>
+#include <QDateTime>
 #include <QDebug>
 #include <QFile>
 #include <QFileOpenEvent>
@@ -45,9 +50,9 @@ static QString ipcServerName()
     QString name("BitcoinQt");
 
     // Append a simple hash of the datadir
-    // Note that gArgs.GetDataDirNet() returns a different path
+    // Note that GetDataDir(true) returns a different path
     // for -testnet versus main net
-    QString ddir(GUIUtil::PathToQString(gArgs.GetDataDirNet()));
+    QString ddir(GUIUtil::boostPathToQString(GetDataDir(true)));
     name.append(QString::number(qHash(ddir)));
 
     return name;
@@ -74,11 +79,32 @@ void PaymentServer::ipcParseCommandLine(int argc, char* argv[])
     for (int i = 1; i < argc; i++)
     {
         QString arg(argv[i]);
-        if (arg.startsWith("-")) continue;
+        if (arg.startsWith("-"))
+            continue;
 
+        // If the bitcoin: URI contains a payment request, we are not able to detect the
+        // network as that would require fetching and parsing the payment request.
+        // That means clicking such an URI which contains a testnet payment request
+        // will start a mainnet instance and throw a "wrong network" error.
         if (arg.startsWith(BITCOIN_IPC_PREFIX, Qt::CaseInsensitive)) // bitcoin: URI
         {
+            if (savedPaymentRequests.contains(arg)) continue;
             savedPaymentRequests.insert(arg);
+
+            SendCoinsRecipient r;
+            if (GUIUtil::parseBitcoinURI(arg, &r) && !r.address.isEmpty())
+            {
+                auto tempChainParams = CreateChainParams(gArgs, CBaseChainParams::MAIN);
+
+                if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
+                    SelectParams(CBaseChainParams::MAIN);
+                } else {
+                    tempChainParams = CreateChainParams(gArgs, CBaseChainParams::TESTNET);
+                    if (IsValidDestinationString(r.address.toStdString(), *tempChainParams)) {
+                        SelectParams(CBaseChainParams::TESTNET);
+                    }
+                }
+            }
         }
     }
 }
@@ -122,8 +148,11 @@ bool PaymentServer::ipcSendCommandLine()
     return fResult;
 }
 
-PaymentServer::PaymentServer(QObject* parent, bool startLocalServer)
-    : QObject(parent)
+PaymentServer::PaymentServer(QObject* parent, bool startLocalServer) :
+    QObject(parent),
+    saveURIs(true),
+    uriServer(nullptr),
+    optionsModel(nullptr)
 {
     // Install global event filter to catch QFileOpenEvents
     // on Mac: sent when you click bitcoin: links
@@ -151,7 +180,9 @@ PaymentServer::PaymentServer(QObject* parent, bool startLocalServer)
     }
 }
 
-PaymentServer::~PaymentServer() = default;
+PaymentServer::~PaymentServer()
+{
+}
 
 //
 // OSX-specific way of handling bitcoin: URIs
@@ -202,18 +233,15 @@ void PaymentServer::handleURIOrFile(const QString& s)
             SendCoinsRecipient recipient;
             if (GUIUtil::parseBitcoinURI(s, &recipient))
             {
-                std::string error_msg;
-                const CTxDestination dest = DecodeDestination(recipient.address.toStdString(), error_msg);
-
-                if (!IsValidDestination(dest)) {
+                if (!IsValidDestinationString(recipient.address.toStdString())) {
                     if (uri.hasQueryItem("r")) {  // payment request
                         Q_EMIT message(tr("URI handling"),
-                            tr("Cannot process payment request because BIP70 is not supported.\n"
-                               "Due to widespread security flaws in BIP70 it's strongly recommended that any merchant instructions to switch wallets be ignored.\n"
-                               "If you are receiving this error you should request the merchant provide a BIP21 compatible URI."),
+                            tr("Cannot process payment request because BIP70 is not supported.")+
+                            tr("Due to widespread security flaws in BIP70 it's strongly recommended that any merchant instructions to switch wallets be ignored.")+
+                            tr("If you are receiving this error you should request the merchant provide a BIP21 compatible URI."),
                             CClientUIInterface::ICON_WARNING);
                     }
-                    Q_EMIT message(tr("URI handling"), QString::fromStdString(error_msg),
+                    Q_EMIT message(tr("URI handling"), tr("Invalid payment address %1").arg(recipient.address),
                         CClientUIInterface::MSG_ERROR);
                 }
                 else
@@ -231,9 +259,9 @@ void PaymentServer::handleURIOrFile(const QString& s)
     if (QFile::exists(s)) // payment request file
     {
         Q_EMIT message(tr("Payment request file handling"),
-            tr("Cannot process payment request because BIP70 is not supported.\n"
-               "Due to widespread security flaws in BIP70 it's strongly recommended that any merchant instructions to switch wallets be ignored.\n"
-               "If you are receiving this error you should request the merchant provide a BIP21 compatible URI."),
+            tr("Cannot process payment request because BIP70 is not supported.")+
+            tr("Due to widespread security flaws in BIP70 it's strongly recommended that any merchant instructions to switch wallets be ignored.")+
+            tr("If you are receiving this error you should request the merchant provide a BIP21 compatible URI."),
             CClientUIInterface::ICON_WARNING);
     }
 }

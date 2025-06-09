@@ -8,17 +8,17 @@
 
 #include <string>
 
+#include <fs.h>
 #include <serialize.h>
-#include <util/fs.h>
 
 struct FlatFilePos
 {
-    int nFile{-1};
-    unsigned int nPos{0};
+    int nFile;
+    unsigned int nPos;
 
     SERIALIZE_METHODS(FlatFilePos, obj) { READWRITE(VARINT_MODE(obj.nFile, VarIntMode::NONNEGATIVE_SIGNED), VARINT(obj.nPos)); }
 
-    FlatFilePos() = default;
+    FlatFilePos() : nFile(-1), nPos(0) {}
 
     FlatFilePos(int nFileIn, unsigned int nPosIn) :
         nFile(nFileIn),
@@ -33,6 +33,7 @@ struct FlatFilePos
         return !(a == b);
     }
 
+    void SetNull() { nFile = -1; nPos = 0; }
     bool IsNull() const { return (nFile == -1); }
 
     std::string ToString() const;
@@ -63,7 +64,7 @@ public:
     fs::path FileName(const FlatFilePos& pos) const;
 
     /** Open a handle to the file at the given position. */
-    FILE* Open(const FlatFilePos& pos, bool read_only = false) const;
+    FILE* Open(const FlatFilePos& pos, bool read_only = false);
 
     /**
      * Allocate additional space in a file after the given starting position. The amount allocated
@@ -74,7 +75,7 @@ public:
      * @param[out] out_of_space Whether the allocation failed due to insufficient disk space.
      * @return The number of bytes successfully allocated.
      */
-    size_t Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space) const;
+    size_t Allocate(const FlatFilePos& pos, size_t add_size, bool& out_of_space);
 
     /**
      * Commit a file to disk, and optionally truncate off extra pre-allocated bytes if final.
@@ -83,7 +84,7 @@ public:
      * @param[in] finalize True if no more data will be written to this file.
      * @return true on success, false on failure.
      */
-    bool Flush(const FlatFilePos& pos, bool finalize = false) const;
+    bool Flush(const FlatFilePos& pos, bool finalize = false);
 };
 
 #endif // BITCOIN_FLATFILE_H

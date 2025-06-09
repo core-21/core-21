@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-FUZZ_TARGET(flatfile)
+void test_one_input(const std::vector<uint8_t>& buffer)
 {
     FuzzedDataProvider fuzzed_data_provider(buffer.data(), buffer.size());
     std::optional<FlatFilePos> flat_file_pos = ConsumeDeserializable<FlatFilePos>(fuzzed_data_provider);
@@ -25,4 +25,6 @@ FUZZ_TARGET(flatfile)
         assert((*flat_file_pos == *another_flat_file_pos) != (*flat_file_pos != *another_flat_file_pos));
     }
     (void)flat_file_pos->ToString();
+    flat_file_pos->SetNull();
+    assert(flat_file_pos->IsNull());
 }

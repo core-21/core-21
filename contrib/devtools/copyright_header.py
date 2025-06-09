@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016-2022 The Bitcoin Core developers
+# Copyright (c) 2016-2020 The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,9 +19,11 @@ EXCLUDE = [
     'src/qt/bitcoinstrings.cpp',
     'src/chainparamsseeds.h',
     # other external copyrights:
+    'src/reverse_iterator.h',
     'src/test/fuzz/FuzzedDataProvider.h',
     'src/tinyformat.h',
     'src/bench/nanobench.h',
+    'test/functional/test_framework/bignum.py',
     # python init:
     '*__init__.py',
 ]
@@ -31,8 +33,8 @@ EXCLUDE_DIRS = [
     # git subtrees
     "src/crypto/ctaes/",
     "src/leveldb/",
-    "src/minisketch",
     "src/secp256k1/",
+    "src/univalue/",
     "src/crc32c/",
 ]
 
@@ -93,6 +95,7 @@ EXPECTED_HOLDER_NAMES = [
     r"Satoshi Nakamoto",
     r"The Bitcoin Core developers",
     r"BitPay Inc\.",
+    r"University of Illinois at Urbana-Champaign\.",
     r"Pieter Wuille",
     r"Wladimir J\. van der Laan",
     r"Jeff Garzik",
@@ -316,13 +319,15 @@ def get_most_recent_git_change_year(filename):
 ################################################################################
 
 def read_file_lines(filename):
-    with open(filename, 'r', encoding="utf8") as f:
-        file_lines = f.readlines()
+    f = open(filename, 'r', encoding="utf8")
+    file_lines = f.readlines()
+    f.close()
     return file_lines
 
 def write_file_lines(filename, file_lines):
-    with open(filename, 'w', encoding="utf8") as f:
-        f.write(''.join(file_lines))
+    f = open(filename, 'w', encoding="utf8")
+    f.write(''.join(file_lines))
+    f.close()
 
 ################################################################################
 # update header years execution
@@ -365,7 +370,7 @@ def create_updated_copyright_line(line, last_git_change_year):
     space_split = after_copyright.split(' ')
     year_range = space_split[0]
     start_year, end_year = parse_year_range(year_range)
-    if end_year >= last_git_change_year:
+    if end_year == last_git_change_year:
         return line
     return (before_copyright + copyright_splitter +
             year_range_to_str(start_year, last_git_change_year) + ' ' +

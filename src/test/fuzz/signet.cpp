@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 The Bitcoin Core developers
+// Copyright (c) 2020 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,22 +10,20 @@
 #include <test/fuzz/FuzzedDataProvider.h>
 #include <test/fuzz/fuzz.h>
 #include <test/fuzz/util.h>
-#include <test/util/setup_common.h>
-#include <util/chaintype.h>
 
 #include <cstdint>
 #include <optional>
 #include <vector>
 
-void initialize_signet()
+void initialize()
 {
-    static const auto testing_setup = MakeNoLogFileContext<>(ChainType::SIGNET);
+    InitializeFuzzingContext(CBaseChainParams::SIGNET);
 }
 
-FUZZ_TARGET(signet, .init = initialize_signet)
+void test_one_input(const std::vector<uint8_t>& buffer)
 {
     FuzzedDataProvider fuzzed_data_provider{buffer.data(), buffer.size()};
-    const std::optional<CBlock> block = ConsumeDeserializable<CBlock>(fuzzed_data_provider, TX_WITH_WITNESS);
+    const std::optional<CBlock> block = ConsumeDeserializable<CBlock>(fuzzed_data_provider);
     if (!block) {
         return;
     }

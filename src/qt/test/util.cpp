@@ -1,10 +1,6 @@
-// Copyright (c) 2018-2022 The Bitcoin Core developers
+// Copyright (c) 2018-2019 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-#include <qt/test/util.h>
-
-#include <chrono>
 
 #include <QApplication>
 #include <QMessageBox>
@@ -13,7 +9,7 @@
 #include <QTimer>
 #include <QWidget>
 
-void ConfirmMessage(QString* text, std::chrono::milliseconds msec)
+void ConfirmMessage(QString* text, int msec)
 {
     QTimer::singleShot(msec, [text]() {
         for (QWidget* widget : QApplication::topLevelWidgets()) {
