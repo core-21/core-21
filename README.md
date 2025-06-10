@@ -1,8 +1,8 @@
 Bitcoin Core integration/staging tree, v21.0 forever
 =====================================
 
-https://bitcoincore.org
-https://bitcoincore.org/en/releases/0.21.0/
+https://bitcoincore.org \
+https://bitcoincore.org/en/releases/0.21.0/ \
 https://bitcoincore.org/bin/bitcoin-core-0.21.0/bitcoin-0.21.0.torrent
 
 magnet:?xt=urn:btih:665c5bdc6f49948e47c1098d91ace98bd216150e&dn=bitcoin-core-0.21.0&tr=udp%3A%2F%2Ftracker.openbittorrent.com%3A80&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.leechers-paradise.org%3A6969%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Ftracker.bitcoin.sprovoost.nl%3A6969
